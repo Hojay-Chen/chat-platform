@@ -4,13 +4,13 @@
 # simulation-agent-platform 仓库独立部署)。构建走 Gradle。
 set -euo pipefail
 
-BACKEND_JAR=/home/ubuntu/claude-workspace/companion-agent/chat/build/libs/chat-platform-1.0.0.jar
+BACKEND_JAR=/home/ubuntu/claude-workspace/chat-platform/chat/build/libs/chat-platform-1.0.0.jar
 GRADLE=/home/ubuntu/tools/gradle/gradle-8.14.3/bin/gradle
-FRONTEND_DIST=/home/ubuntu/claude-workspace/companion-agent/frontend/dist
+FRONTEND_DIST=/home/ubuntu/claude-workspace/chat-platform/frontend/dist
 NGINX_SRC=/home/ubuntu/claude-workspace/infrastructure/nginx/sites/companion.conf
 
 echo "==> 1. 编译打包(Gradle, chat 平台)"
-cd /home/ubuntu/claude-workspace/companion-agent
+cd /home/ubuntu/claude-workspace/chat-platform
 $GRADLE -q :chat:bootJar
 test -f "$BACKEND_JAR" || { echo "打包失败: $BACKEND_JAR 不存在"; exit 1; }
 
@@ -39,7 +39,7 @@ Type=simple
 User=ubuntu
 # 敏感配置(如 DEEPSEEK_API_KEY)放在 /etc/companion/.env, 不入 git
 EnvironmentFile=/etc/companion/.env
-WorkingDirectory=/home/ubuntu/claude-workspace/companion-agent/backend
+WorkingDirectory=/home/ubuntu/claude-workspace/chat-platform/backend
 ExecStart=/usr/bin/java -jar $BACKEND_JAR
 Restart=always
 RestartSec=5

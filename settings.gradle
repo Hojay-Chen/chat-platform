@@ -1,4 +1,4 @@
-// companion-agent — 仓 1（聊天平台 + 应用平台）
+// chat-platform — 仓 1（聊天平台 + 应用平台）
 //
 // 多项目布局（G1 物理拆分）:
 //   chat/        聊天平台主体 —— 服务启动类 ChatPlatformApplication 在这里, 拉起整个服务
@@ -9,6 +9,6 @@
 // 仿真 Agent 平台在另一个独立仓库 simulation-agent-platform —— 它消费本仓 contract
 // 发出的 artifact（./gradlew :contract:publishToMavenLocal）。
 
-rootProject.name = 'companion-agent'
+rootProject.name = 'chat-platform'
 
 include 'contract', 'common', 'application', 'chat'

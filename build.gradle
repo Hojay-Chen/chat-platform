@@ -1,4 +1,4 @@
-// companion-agent 根构建 —— 插件版本、仓库、公共配置都在这一份里。
+// chat-platform 根构建 —— 插件版本、仓库、公共配置都在这一份里。
 //
 // 版本口径与原 Maven 父 pom 完全一致: Spring Boot 2.7.18 / JDK 17 / javax.* 生态。
 // 仓库顺序: mavenLocal 优先（离线时 ~/.m2 里已缓存全套 2.7.18 依赖）, 其次阿里云镜像。

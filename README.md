@@ -253,7 +253,7 @@ build.gradle 依赖图 / contract 零仓内依赖）→ `gradle test` **466 全�
 ### 构建口径（G1 起）
 
 ```bash
-cd companion-agent
+cd chat-platform
 bash scripts/check-v10.sh                 # 边界守卫（Gradle 版）
 ~/tools/gradle/gradle-8.14.3/bin/gradle test        # 466 测试
 ~/tools/gradle/gradle-8.14.3/bin/gradle :chat:bootJar   # chat-platform-1.0.0.jar
@@ -1541,10 +1541,10 @@ JDK 17 · Maven 3.8+ · Node 18+ · 本地 PostgreSQL（`admin`/`shared-secret`�
 psql -h 127.0.0.1 -U admin -d postgres -c "CREATE DATABASE companion;"
 
 # 2. 后端（端口 8081）
-cd companion-agent/backend && ./run.sh            # 或 mvn spring-boot:run
+cd chat-platform/backend && ./run.sh            # 或 mvn spring-boot:run
 
 # 3. 前端（端口 5173，代理 /api → 8081）
-cd companion-agent/frontend && npm install && npm run dev
+cd chat-platform/frontend && npm install && npm run dev
 
 # 4. 浏览器打开 http://127.0.0.1:5173
 ```
@@ -1559,7 +1559,7 @@ export LLM_CHAT_MODEL=deepseek-chat
 
 ### 25.4 生产部署
 ```bash
-sudo bash companion-agent/scripts/deploy.sh
+sudo bash chat-platform/scripts/deploy.sh
 ```
 自动完成：前端产物 → `/var/www/companion` · nginx 配置 → `/etc/nginx/conf.d/` · `/etc/hosts` · systemd 服务 `luxera-companion-backend` · nginx 重载 · 健康检查。
 > ⚠️ `deploy.sh` 会重写 systemd 单元，**必须保留 `EnvironmentFile=/etc/companion/.env`**（内含 `DEEPSEEK_API_KEY`），否则降级 Mock。

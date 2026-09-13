@@ -2,7 +2,7 @@
 """为 README.md 生成/替换 GitHub 兼容的可点击目录(TOC)。幂等: 替换已有 TOC 块, 不重复插入。"""
 import re
 
-PATH = "/home/ubuntu/claude-workspace/companion-agent/README.md"
+PATH = "/home/ubuntu/claude-workspace/chat-platform/README.md"
 
 def slug(text: str) -> str:
     t = re.sub(r"<[^>]*>", "", text)
