@@ -32,3 +32,5 @@ Thumbs.db
 /data/
 *.sqlite
 __pycache__/
+.gradle/
+**/build/

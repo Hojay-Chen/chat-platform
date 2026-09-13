@@ -1,0 +1,21 @@
+// common —— 仓内公共件（原 platform-kernel 演化）。
+//
+// 依赖 contract（kernel 本来就依赖 contracts）; 不被 contract 反向依赖。
+// 内容: auth(users/JWT) / config(过滤器链/CORS/属性) / outbox(事件兜底) / common(异常与转换器)。
+// 仿真 Agent 仓库不引用本项目的任何类 —— 它拿到的是 contract artifact。
+//
+// 与原 kernel 的差别: 两服务拆分后, 本项目只服务仓 1（chat + application 同进程）;
+// DH 侧用到的 kernel 类（AppProperties/CurrentUser 等）已随 digital-human-platform
+// 迁往仿真 Agent 仓库并归入它自己的 common。
+
+dependencies {
+    api project(':contract')
+    api 'org.springframework.boot:spring-boot-starter-web'
+    api 'org.springframework.boot:spring-boot-starter-data-jpa'
+    api 'org.springframework.boot:spring-boot-starter-security'
+    api 'org.springframework.boot:spring-boot-starter-validation'
+    api 'io.jsonwebtoken:jjwt-api'
+    implementation 'io.jsonwebtoken:jjwt-impl'
+    implementation 'io.jsonwebtoken:jjwt-jackson'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}

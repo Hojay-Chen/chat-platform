@@ -79,7 +79,7 @@ else
 fi
 
 note "起平台 (jar, 带 LAP_REMOTE_APPLICATIONS)"
-JAR="$ROOT/backend/bootstrap-app/target/companion-platform-bootstrap-1.0.0.jar"
+JAR="${LAP_JAR:-$ROOT/chat/build/libs/chat-platform-1.0.0.jar}"
 if [ ! -f "$JAR" ]; then
   fail "找不到 $JAR —— 先 mvn -o clean package -DskipTests"
   echo ""; echo "❌ 验收未通过"; exit 1

@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # 部署 companion.luxera.top (需 root)
-# V10 多模块: 可执行 jar 由 bootstrap-app 组装(单进程部署; 两平台分进程见 docs/ARCHITECTURE.md)
+# G1 物理拆分: 可执行 jar 由 chat 项目组装(聊天+应用平台同进程; 仿真 Agent 平台在
+# simulation-agent-platform 仓库独立部署)。构建走 Gradle。
 set -euo pipefail
 
-BACKEND_JAR=/home/ubuntu/claude-workspace/companion-agent/backend/bootstrap-app/target/companion-platform-bootstrap-1.0.0.jar
+BACKEND_JAR=/home/ubuntu/claude-workspace/companion-agent/chat/build/libs/chat-platform-1.0.0.jar
+GRADLE=/home/ubuntu/tools/gradle/gradle-8.14.3/bin/gradle
 FRONTEND_DIST=/home/ubuntu/claude-workspace/companion-agent/frontend/dist
 NGINX_SRC=/home/ubuntu/claude-workspace/infrastructure/nginx/sites/companion.conf
 
-echo "==> 1. 编译打包(多模块)"
-cd /home/ubuntu/claude-workspace/companion-agent/backend
-mvn -q -DskipTests package
+echo "==> 1. 编译打包(Gradle, chat 平台)"
+cd /home/ubuntu/claude-workspace/companion-agent
+$GRADLE -q :chat:bootJar
 test -f "$BACKEND_JAR" || { echo "打包失败: $BACKEND_JAR 不存在"; exit 1; }
 
 echo "==> 2. 前端静态产物 → /var/www/companion"

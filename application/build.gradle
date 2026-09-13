@@ -1,0 +1,21 @@
+// application —— 应用平台（LAP）: 能力目录 / manifest / ActionGateway / 会话 / 邀请 /
+// MCP 适配器 / 远端应用 / 开发者 API。
+//
+// 依赖 contract（application 业务的端口与词汇）; **不依赖 common**（application-platform
+// 在 Maven 时代就完全不依赖 kernel, 这是它"可独立嵌入任意宿主"的结构性保证, 保持）。
+// 由 chat 的启动类装配进同一进程（见 chat/build.gradle）。
+
+dependencies {
+    api project(':contract')
+    api 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // 测试连隔离的 companion_test PostgreSQL（与 Maven 时代同一口径）
+    testRuntimeOnly 'org.postgresql:postgresql'
+}
+
+// 主/测试资源都有 applications/ 目录（内置应用 manifest 与测试探针）, 同名条目
+// 以"后者覆盖"合并 —— 与 Maven 时代 testResources 后到者优先的语义一致。
+tasks.withType(Copy).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

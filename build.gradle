@@ -1,0 +1,68 @@
+// companion-agent 根构建 —— 插件版本、仓库、公共配置都在这一份里。
+//
+// 版本口径与原 Maven 父 pom 完全一致: Spring Boot 2.7.18 / JDK 17 / javax.* 生态。
+// 仓库顺序: mavenLocal 优先（离线时 ~/.m2 里已缓存全套 2.7.18 依赖）, 其次阿里云镜像。
+
+plugins {
+    id 'java'
+    id 'io.spring.dependency-management' version '1.1.7' apply false
+    id 'org.springframework.boot' version '2.7.18' apply false
+}
+
+allprojects {
+    group = 'com.luxera'
+    version = '1.0.0'
+
+    repositories {
+        mavenLocal()
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        mavenCentral()
+    }
+}
+
+subprojects {
+    apply plugin: 'java-library'
+    apply plugin: 'io.spring.dependency-management'
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // 与 spring-boot-starter-parent 的依赖管理对齐（Gradle 侧没有 parent pom 可继承）
+    dependencyManagement {
+        imports {
+            mavenBom org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES
+        }
+        dependencies {
+            dependency 'io.jsonwebtoken:jjwt-api:0.11.5'
+            dependency 'io.jsonwebtoken:jjwt-impl:0.11.5'
+            dependency 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+            dependency 'com.tngtech.archunit:archunit-junit5:1.0.1'
+        }
+    }
+
+    // Lombok 由上面的 annotationProcessor 依赖声明处理, 不需要手工拼 processor path
+    compileJava {
+        options.encoding = 'UTF-8'
+    }
+    compileTestJava {
+        options.encoding = 'UTF-8'
+    }
+
+    test {
+        useJUnitPlatform()
+        testLogging {
+            events 'failed'
+            exceptionFormat 'full'
+        }
+    }
+
+    // Lombok 全局（与 Maven exclude 打包的口径一致: 注解处理器只在编译期）
+    dependencies {
+        compileOnly 'org.projectlombok:lombok'
+        annotationProcessor 'org.projectlombok:lombok'
+        testCompileOnly 'org.projectlombok:lombok'
+        testAnnotationProcessor 'org.projectlombok:lombok'
+    }
+}

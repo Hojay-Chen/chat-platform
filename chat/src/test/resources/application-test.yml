@@ -1,0 +1,33 @@
+# 测试配置: 隔离的 companion_test 数据库, 避免干扰运行中的服务。
+# G1 拆分后: 本文件只服务 chat + application(LAP) 的测试; DH 侧的 key
+# （llm/life/behavior 等）随 digital-human-platform 迁往 simulation-agent-platform。
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/companion_test
+    username: admin
+    password: shared-secret
+    # 限制测试连接池: 多个 @SpringBootTest context 各建池, 避免超过 PG max_connections
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 30000
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+app:
+  # MCP 的服务密钥, 与 application-platform 的测试同一个理由: 密钥留空 = MCP 完全关闭, 那样
+  # McpEndpointSecurityTest 只能看到"MCP 说不认识你", 测不到"过滤器放行了 /mcp"这件事。
+  # 生产上必须由 LAP_MCP_SERVICE_KEY 显式给, 这里不是任何默认值。
+  lap:
+    mcp:
+      service-key: test-mcp-service-key
+  # LAP 提醒投递(测试里必须钉死, 否则 context 启动后会真的每 5 分钟扫一次库)
+  reminder:
+    dispatch-cron: 0 0 0 1 1 *
+  scheduler:
+    thread-maintenance-cron: 0 0 0 1 1 *
+    invocation-reaper-cron: 0 0 0 1 1 *
+    session-reaper-cron: 0 0 0 1 1 *
+    lap-outbox-relay-cron: 0 0 0 1 1 *
+    outbox-relay-cron: 0 0 0 1 1 *

@@ -78,7 +78,7 @@ if [ -n "${JAR_PID:-}" ]; then
   note "复用在跑的服务 (pid=$JAR_PID)"
 else
   note "起平台 (jar, 带 LAP_REMOTE_APPLICATIONS 注册远端五子棋)"
-  JAR="$ROOT/backend/bootstrap-app/target/companion-platform-bootstrap-1.0.0.jar"
+  JAR="${LAP_JAR:-$ROOT/chat/build/libs/chat-platform-1.0.0.jar}"
   if [ ! -f "$JAR" ]; then
     fail "找不到 $JAR —— 先 mvn -o package -DskipTests"
     echo ""; echo "❌ 验收未通过"; exit 1
@@ -214,7 +214,7 @@ MSG=$(jq_ "d['error']['message']")
 
 # ── 断言 R6: 签名/密钥隔离 —— 密钥不在 manifest 里, 只在配置里 ──
 note "断言 R6: manifest 无密钥"
-MANIFEST_FILE="$ROOT/backend/application-platform/src/main/resources/applications/remote-gomoku/1.0.0/application-manifest.json"
+MANIFEST_FILE="$ROOT/application/src/main/resources/applications/remote-gomoku/1.0.0/application-manifest.json"
 grep -q "$SECRET" "$MANIFEST_FILE" && fail "密钥出现在 manifest 里" \
   || ok "manifest 里没有密钥 (authRef 只是名字)"
 CODE=$(http GET "/api/v1/applications/$APP_ID")

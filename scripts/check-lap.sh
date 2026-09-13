@@ -503,6 +503,17 @@ dh_cleanup() { unseat_agent "$DH_AGENT"; }
 trap 'dh_cleanup; rm -rf "$TMP"' EXIT
 
 note "断言 11: 真人走一步 → 数字人的应手 (R7)"
+# G1 物理拆分: 数字人平台已迁往 simulation-agent-platform 独立进程。
+# LAP_AGENT_MODE=split 时这一段诚实跳过 —— "事件到达数字人"从此要在两服务同起后由
+# check-split.sh 断言(跨服务链路), 本脚本继续守平台侧的全部语义。
+LAP_AGENT_MODE_ENV="${LAP_AGENT_MODE:-single}"
+if [ "$LAP_AGENT_MODE_ENV" = "split" ]; then
+  skip "数字人应手 — Agent 平台已独立进程, 跨服务链路由两服务同起后的 check-split.sh 断言"
+  DH_MODE="skipped"
+  # single 模式下断言 11 的末尾会另开一局把 $URI 复原成"没下过的棋"; split 模式跳过了
+  # 那段, 这里补上同一动作, 让断言 14/15 拿到的还是它假设的那个起点。
+  open_session
+else
 LAP_LOG="${LAP_LOG:-/tmp/companion-run.log}"
 if [ ! -f "$LAP_LOG" ]; then
   fail "找不到服务日志 $LAP_LOG —— 没有它就无法区分'数字人故意不动手'与'事件根本没送到'。
@@ -583,6 +594,7 @@ else
   # 再开一局拿一个新会话还给它们 —— 这一局留给断言 15 用。
   open_session
 fi
+fi  # LAP_AGENT_MODE=split 的 else 在这里闭合
 
 # ── 断言 12: 现实账本 ──
 # 账本条目是"数字人真的动了手"的产物, 所以它和断言 15 是同一个前提, 不是同一轮次的事。
@@ -756,7 +768,9 @@ fi
 # 判据刻意分成两步: 先"有一行", 再"这行被投出去了"。只断言第一步的话, 一个从不投递的
 # relay 也能全绿; 只断言第二步的话, 一个不落库就直投的实现也能全绿 —— 而那样进程一死就丢。
 note "断言 17: INBOX 订阅落进 lap_outbox 并被 relay 投出"
-if [ "$FAIL" != "0" ]; then
+if [ "$LAP_AGENT_MODE_ENV" = "split" ]; then
+  skip "INBOX 投递 — 事件消费者(数字人)已独立进程, G3 后 relay 投 HTTP, 到时由 check-split.sh 断言投递"
+elif [ "$FAIL" != "0" ]; then
   skip "outbox 投递 — 前面的断言已经失败, 这一局的起点不可信"
 else
   # 开一盘全新的棋: 前面几段都在同一局上落过子, 复用那个 URI 会让"这两手有没有真的
@@ -818,7 +832,9 @@ fi
 # 还要证明的是 §66 那句话: 卡片**是一条消息**, 不是一张新表。判据是 messages 表里那一行,
 # 以及它和同一段对话里别的消息排在同一条时间线上。
 note "断言 19: 在对话里开应用 → 卡片消息 → 分享链接 (R12)"
-if [ "$FAIL" != "0" ]; then
+if [ "$LAP_AGENT_MODE_ENV" = "split" ]; then
+  skip "对话内应用集成 — 本段需要先建一个伴侣(/api/companions), 该端点随 Agent 平台独立; 两服务同起后再验"
+elif [ "$FAIL" != "0" ]; then
   skip "对话内应用集成 — 前面的断言已经失败, 这一段的起点不可信"
 else
   R12_PERSONA='{"name":"小满","description":"一个温柔独立的女生","traits":["温柔"]}'
@@ -932,7 +948,9 @@ fi
 #      默认一个"去"会让它在 LLM 不可用时到处乱窜。两种默认值都在这里被挡住。真实 LLM 下
 #      (LAP_EXPECT_AGENT_JOIN=1)则断言它真的进了场、账本里留下 ACCEPTED。
 note "断言 20: 定向邀请 → 数字人自己决定去不去 (R13)"
-if [ "$FAIL" != "0" ]; then
+if [ "$LAP_AGENT_MODE_ENV" = "split" ]; then
+  skip "定向邀请的数字人侧 — Agent 平台已独立进程, 邀请消费链路由两服务同起后断言"
+elif [ "$FAIL" != "0" ]; then
   skip "数字人参与 — 前面的断言已经失败, 这一段的起点不可信"
 else
   R13_PERSONA='{"name":"小满","description":"一个温柔独立的女生","traits":["温柔"]}'

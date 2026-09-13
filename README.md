@@ -213,6 +213,58 @@ backend/
 
 ---
 
+## G1 物理拆分 · 聊天平台 Gradle 化（2026-09，进行中）
+
+> **目标**：聊天平台 + 应用平台一个仓库一个服务（由聊天平台启动类拉起），
+> 仿真 Agent 平台独立仓库独立进程；两套全新前端；仿真 Agent 的 OpenAPI 服务与聊天平台内的对接功能。
+> 分轮：**G1 仓 1 Gradle 化 → G2 仓 2 骨架+DH 迁移 → G3 跨服务 HTTP 化 → G4 OpenAPI 服务 → G5 聊天前端 → G6 Agent 管理前端 → G7 联调部署**。
+
+### G1 已完成（仓 1 Gradle 化）
+
+**结构**（用户拍板的组织方式）：一个根 `build.gradle` 多项目；`contract`（对外契约，
+**零仓内依赖**，`publishToMavenLocal` 成 `com.luxera:contract:1.0.0` 供 Agent 仓库引入）、
+`common`（kernel 演化：auth/JWT/outbox/异常）、`application`（LAP）、`chat`（主体，
+**启动类 `ChatPlatformApplication` 在这里**，端口 8081 不变）。Java 包名刻意不动
+（`com.luxera.companion.*`）—— 改包名是零收益纯风险，目录分业务在 Gradle 项目边界上表达。
+Gradle 8.14.3（腾讯镜像直连可下），Spring Boot 2.7.18/JDK 17 依赖全部走 `mavenLocal()`
++ 阿里云镜像复用，无需重新下载。
+
+**验收全链绿**：`check-v10.sh`（改为守 Gradle 四项目：包归属互斥 10 包 / 源码引用 /
+build.gradle 依赖图 / contract 零仓内依赖）→ `gradle test` **466 全绿**
+（contract 23 / application 399 / chat 44）→ `:chat:bootJar`（43MB fat jar）→
+真进程冒烟（8081 起、登录、LAP、MCP）→ `check.sh`（`CHECK_MODE=split`：表结构+登录，
+伴侣端到端段诚实跳过——它要验的链路从"一个进程内"变成"两服务之间"，G3 后由
+`check-split.sh` 承担）→ `check-lap.sh`（`LAP_AGENT_MODE=split`：断言 11/17/19/20 涉及
+数字人侧的诚实跳过，平台侧语义全部照验）→ `check-remote-app.sh` 全绿 →
+`check-ecosystem.sh` **E1–E7 全绿** → 前端 24 测试 + build 绿。
+
+**拆分中暴露并修掉的三个结构事实**（都是"单进程时代隐形"的）：
+1. **测试桩与真实现的 Bean 冲突**：conversation 组测试的假应用目录（纸飞机 stub，
+   "chat 不认识任何具体应用"的判据）与真 LAP 适配器在同一个 classpath 上撞了 ——
+   测试启动类移出扫描前缀（`com.luxera.chatframework`）+ 显式 `scanBasePackages`/`@EnableJpaRepositories`。
+2. **架构守卫按新 classpath 改写**：`ModuleBoundaryArchitectureTest` 从"三模块互斥"
+   改为守"chat↔application 经 contract 相见 + common 不认识两平台"；§118（AgentRuntime）
+   随 DH 迁仓 2；`BeanNameCollision` 的覆盖面下限从 200 校准到拆分后的 114+。
+3. **`CompanionDirectoryPort` 的启动缺口**：DH 搬走后 chat 主进程没有这个端口的实现
+   —— 用 `@ConditionalOnMissingBean` 占位（`requireOwned` 诚实拒绝、`onUserMessage` 静默，
+   与"进程外 DH 不在场"等价），G3 落 HTTP 适配器时自动退位。这正是 fire-and-forget
+   语义（V10 §2.1）的红利：Agent 平台缺席时聊天平台不残废。
+
+### 构建口径（G1 起）
+
+```bash
+cd companion-agent
+bash scripts/check-v10.sh                 # 边界守卫（Gradle 版）
+~/tools/gradle/gradle-8.14.3/bin/gradle test        # 466 测试
+~/tools/gradle/gradle-8.14.3/bin/gradle :chat:bootJar   # chat-platform-1.0.0.jar
+LAP_MCP_SERVICE_KEY=<key> java -jar chat/build/libs/chat-platform-1.0.0.jar
+CHECK_MODE=split bash scripts/check.sh             # 聊天侧
+LAP_AGENT_MODE=split LAP_LOG=<log> bash scripts/check-lap.sh   # 平台侧
+bash scripts/check-remote-app.sh && bash scripts/check-ecosystem.sh
+```
+
+---
+
 ## LAP · 应用平台与生态（2026-09，R1–R15 全部完成）
 
 > **本轮依据**：《LAP v1 — Application Platform Final Architecture》。四层协议

@@ -1,0 +1,35 @@
+// contract —— 对外接口定义项目。
+//
+// 铁律: 不依赖仓内任何其他 Gradle 项目（settings.gradle 里也只在 chat 侧单向引用它）。
+// 它会被 publishToMavenLocal 成 com.luxera:contract:1.0.0, 被仿真 Agent 平台仓库
+// （simulation-agent-platform）当作普通外部依赖引入 —— 这正是"契约先行"的物理形态。
+//
+// 内部按业务分目录（包名不动, 保持与历史测试/文档的引用一致）:
+//   contracts/chat/          聊天业务的对外契约: api(MessageView…) / events / dhcp / simulator / provision / spi 的三个 chat 端口
+//   contracts/application/   应用业务的对外契约: application(LAP 词汇) / chat(卡片/会话视图) / spi 的三个 application 端口
+//
+// 注意: 包名保持 com.luxera.companion.contracts.* 不变 —— 改包名会让 808 个测试与
+// 两个平台仓库的所有 import 一起翻修, 零收益纯风险。目录分业务在 Gradle 项目边界上表达。
+
+dependencies {
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+    // 只用 starter 提供的注解/自动装配元数据, 不带 web 服务器
+    implementation 'org.springframework.boot:spring-boot-starter'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'com.tngtech.archunit:archunit-junit5'
+}
+
+// 生成正常 jar 供两仓消费 (java-library 由根 build.gradle 统一 apply)
+apply plugin: 'maven-publish'
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            groupId = 'com.luxera'
+            artifactId = 'contract'
+            version = '1.0.0'
+        }
+    }
+}

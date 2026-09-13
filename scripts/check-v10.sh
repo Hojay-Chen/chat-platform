@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
-# V10 边界守卫 — 跨模块依赖的静态检查。
+# 边界守卫 — 跨 Gradle 项目依赖的静态检查(G1 拆分版)。
 #
 # 与 ArchUnit 的关系:
-#   - 本脚本是快速第一道防线(grep 源码 + 读 pom), 在 `mvn compile` 之前就能发现问题;
-#   - ModuleBoundaryArchitectureTest(bootstrap-app, 唯一同时看得见所有模块的地方)是结构性第二道,
-#     用 ArchUnit 对编译产物做依赖方向断言, 随 `mvn test` 执行。
+#   - 本脚本是快速第一道防线(grep 源码 + 读 build.gradle), 在编译之前就能发现问题;
+#   - ModuleBoundaryArchitectureTest(chat 项目)是结构性第二道, 用 ArchUnit 对字节码
+#     做依赖方向断言, 随 `gradle test` 执行。
 #   两者都必须通过。
 #
 # 它守的是什么:
-#   1. 各模块"拥有"的包两两不相交(Java 不允许 split package, 跨模块同名包会静默合并);
-#   2. 平台之间互不引用源码 —— chat / digital-human / application 三方两两不相见,
-#      contracts 谁都不能依赖;
-#   3. Maven 依赖图与声明一致 —— 同样的规则在 pom 上再查一遍。
+#   1. 各项目"拥有"的包两两不相交(Java 不允许 split package, 跨项目同名包会静默合并);
+#   2. 平台之间互不引用源码 —— chat 与 application 经 contract 的端口相见,
+#      contract 谁都不能依赖;
+#   3. Gradle 依赖图与声明一致 —— 同样的规则在 build.gradle 上再查一遍。
 #
-# 包归属不写死, 全部从各模块源码树推导 —— 加了新包不需要改这个脚本, 也就不会过期。
+# G1 之前这里守的是五个 Maven 模块; 拆分后 digital-human-platform 整体迁往
+# simulation-agent-platform 仓库, 仓库边界接管了"chat ↔ DH 互不相见"的保证 ——
+# 本脚本继续守**仓内**的四项目边界, 对外契约(contract)仍是核心。
+#
+# 包归属不写死, 全部从各项目源码树推导 —— 加了新包不需要改这个脚本, 也就不会过期。
 set -euo pipefail
 
-BACKEND="$(cd "$(dirname "$0")/../backend" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BASE_PKG="com/luxera/companion"
 
 fail=0
@@ -24,19 +28,19 @@ note() { echo "  $*" >&2; }
 ok()   { note "✓ $*"; }
 bad()  { note "✗ $*"; fail=1; }
 
-# 模块 → 该模块 src/main/java 下 com.luxera.companion.<X> 的 <X> 集合
+# 项目 → 该项目 src/main/java 下 com.luxera.companion.<X> 的 <X> 集合
 owned_packages() {
   local module="$1"
-  local dir="$BACKEND/$module/src/main/java/$BASE_PKG"
+  local dir="$ROOT/$module/src/main/java/$BASE_PKG"
   [[ -d "$dir" ]] || return 0
   find "$dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort
 }
 
-MODULES=(platform-kernel chat-platform digital-human-platform application-platform contracts)
+PROJECTS=(contract common application chat)
 
 echo "== 1) 包归属互斥(split package 检查) =="
 declare -A OWNER
-for m in "${MODULES[@]}"; do
+for m in "${PROJECTS[@]}"; do
   while read -r pkg; do
     [[ -n "$pkg" ]] || continue
     if [[ -n "${OWNER[$pkg]:-}" ]]; then
@@ -46,9 +50,9 @@ for m in "${MODULES[@]}"; do
     fi
   done < <(owned_packages "$m")
 done
-[[ "$fail" -eq 0 ]] && ok "包归属互斥(${#OWNER[@]} 个顶层包分属 ${#MODULES[@]} 个模块)"
+[[ "$fail" -eq 0 ]] && ok "包归属互斥(${#OWNER[@]} 个顶层包分属 ${#PROJECTS[@]} 个项目)"
 
-# 每个模块拥有的包(供第 2 步用)
+# 每个项目拥有的包(供第 2 步用)
 pkgs_of() {
   local want="$1" out=()
   for pkg in "${!OWNER[@]}"; do
@@ -57,68 +61,78 @@ pkgs_of() {
   printf '%s\n' "${out[@]:-}"
 }
 
-echo "== 2) 跨模块源码引用 =="
+echo "== 2) 跨项目源码引用 =="
 check_no_import() {
-  local src_module="$1" forbidden_module="$2"
-  local dir="$BACKEND/$src_module/src"
+  local src_project="$1" forbidden_project="$2"
+  local dir="$ROOT/$src_project/src"
   [[ -d "$dir" ]] || return 0
   local packages pattern hits
-  packages="$(pkgs_of "$forbidden_module" | paste -sd'|' -)"
+  packages="$(pkgs_of "$forbidden_project" | paste -sd'|' -)"
   [[ -n "$packages" ]] || return 0
-  # 匹配 import / 全限定引用 com.luxera.companion.<被禁包>. ; 不匹配该模块自己拥有的包
+  # 匹配 import / 全限定引用 com.luxera.companion.<被禁包>. ; 不匹配该项目自己拥有的包
   pattern="com\\.luxera\\.companion\\.(${packages})\\."
   hits="$(grep -rnE "$pattern" "$dir" --include=*.java 2>/dev/null | grep -v '// CHECK-V10-ALLOW' || true)"
+  # 守卫测试文件整体豁免: 它们的正文里出现别项目的包名是断言素材(比如 ArchUnit 规则
+  # 要写被禁包的全名), 不是依赖。豁免以文件头一行显式标记为凭, 没有标记的照常报。
+  local guard_files
+  guard_files="$(grep -rl 'CHECK-V10-ALLOW-GUARD' "$dir" --include=*.java 2>/dev/null || true)"
+  if [[ -n "$guard_files" ]]; then
+    local exclude=()
+    while IFS= read -r gf; do exclude+=("--exclude=$(basename "$gf")"); done <<< "$guard_files"
+    hits="$(echo "$hits" | grep -vE "$(printf '%s\n' "${guard_files}" | xargs -I{} basename {} | paste -sd'|')" || true)"
+  fi
   if [[ -n "$hits" ]]; then
-    bad "$src_module 引用了 $forbidden_module 拥有的包:"
+    bad "$src_project 引用了 $forbidden_project 拥有的包:"
     echo "$hits" | head -5 | sed 's|^|      |' >&2
   else
-    ok "$src_module 不引用 $forbidden_module 的包"
+    ok "$src_project 不引用 $forbidden_project 的包"
   fi
 }
-check_no_import chat-platform digital-human-platform
-check_no_import digital-human-platform chat-platform
-# 应用平台与两个平台互不相见: 数字人只通过 contracts 的 ApplicationRuntimePort 看见应用
-check_no_import chat-platform application-platform
-check_no_import digital-human-platform application-platform
-check_no_import application-platform chat-platform
-check_no_import application-platform digital-human-platform
-# contracts 是纯 DTO 模块: 谁都不能依赖
-check_no_import contracts chat-platform
-check_no_import contracts digital-human-platform
-check_no_import contracts application-platform
-check_no_import contracts platform-kernel
+# chat 与 application 经 contract 的端口相见, 不碰对方实现
+check_no_import chat application
+check_no_import application chat
+# contract 是纯契约项目: 谁都不能依赖, 它也不依赖任何人
+check_no_import contract chat
+check_no_import contract application
+# common 是仓内底座: 提供者不许认识使用者
+check_no_import common chat
+check_no_import common application
 
-echo "== 3) Maven 依赖图 =="
-pom_depends_on() {
-  local pom="$1" artifact="$2"
-  [[ -f "$pom" ]] || return 1
-  # 只看 <dependency> 的 artifactId, 避免注释/描述里出现同名
-  grep -A 3 '<dependency>' "$pom" | grep -q "<artifactId>${artifact}</artifactId>"
+echo "== 3) Gradle 依赖图 =="
+gradle_depends_on() {
+  local project="$1" other="$2"
+  local build="$ROOT/$project/build.gradle"
+  [[ -f "$build" ]] || return 1
+  # project(':x') 形式的项目依赖
+  grep -q "project(':$other')" "$build"
 }
-pom_of() { echo "$BACKEND/$1/pom.xml"; }
 
-check_pom_absent() {
-  local module="$1" artifact="$2"
-  if pom_depends_on "$(pom_of "$module")" "$artifact"; then
-    bad "$module/pom.xml 依赖了 $artifact"
+check_gradle_absent() {
+  local project="$1" other="$2"
+  if gradle_depends_on "$project" "$other"; then
+    bad "$project/build.gradle 依赖了项目 $other"
   else
-    ok "$module/pom.xml 不依赖 $artifact"
+    ok "$project/build.gradle 不依赖 $other"
   fi
 }
-check_pom_absent chat-platform companion-platform-digital-human
-check_pom_absent digital-human-platform companion-platform-chat
-check_pom_absent chat-platform companion-platform-application
-check_pom_absent digital-human-platform companion-platform-application
-check_pom_absent application-platform companion-platform-chat
-check_pom_absent application-platform companion-platform-digital-human
-check_pom_absent contracts companion-platform-chat
-check_pom_absent contracts companion-platform-digital-human
-check_pom_absent contracts companion-platform-application
-check_pom_absent contracts companion-platform-kernel
+# 依赖图上唯一合法的方向: chat → {contract, common, application}, application/common → contract
+check_gradle_absent contract chat
+check_gradle_absent contract common
+check_gradle_absent contract application
+check_gradle_absent application chat
+check_gradle_absent application common
+check_gradle_absent common application
+
+# contract 项目里不许出现任何仓内项目依赖(用户铁律: 契约不依赖仓库内任何项目)
+if grep -qE "project\(':" "$ROOT/contract/build.gradle"; then
+  bad "contract/build.gradle 出现了仓内项目依赖 —— 契约必须零依赖"
+else
+  ok "contract/build.gradle 零仓内依赖"
+fi
 
 if [[ "$fail" -eq 0 ]]; then
   echo "check-v10 OK"
-  exit 0
+else
+  echo "check-v10 FAILED"
+  exit 1
 fi
-echo "check-v10 FAILED" >&2
-exit 1

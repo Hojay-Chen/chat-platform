@@ -225,7 +225,7 @@ describe('SurfaceHost · 与后端真正发出来的清单对齐', () => {
   // `import.meta.url` 而不是 `__dirname` —— 测试文件是 ESM, 后者在这里并不存在。
   const manifestPath = fileURLToPath(
     new URL(
-      '../../../backend/application-platform/src/main/resources/applications/tictactoe/1.0.0/application-manifest.json',
+      '../../../application/src/main/resources/applications/tictactoe/1.0.0/application-manifest.json',
       import.meta.url,
     ),
   )

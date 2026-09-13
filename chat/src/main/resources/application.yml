@@ -1,0 +1,101 @@
+# 聊天平台 + 应用平台（LAP）服务配置 —— G1 拆分后仓 1 的唯一 application.yml。
+#
+# 原 companion 后端的 application.yml 在这里被裁成两半: 聊天与应用侧的 key 留在本文件,
+# 数字人/仿真 Agent 侧的 key（llm/embedding/agent/proactive 等）随 digital-human-platform
+# 迁往 simulation-agent-platform 仓库的 yml —— 两边各自只声明自己消费的东西。
+server:
+  port: 8081
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: chat-platform
+
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/companion
+    username: admin
+    password: shared-secret
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQL10Dialect
+        jdbc.time_zone: Asia/Shanghai
+
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+    default-property-inclusion: non_null
+
+  task:
+    execution:
+      thread-name-prefix: companion-async-
+      pool:
+        core-size: 4
+        max-size: 12
+        queue-capacity: 200
+
+# ── 业务配置（chat + LAP 消费的子集） ────────────────────────
+app:
+  # 认证（users 表与 JWT 归聊天平台; Agent 平台经服务间调用取用户昵称）
+  jwt:
+    secret: ${JWT_SECRET:luxera-companion-platform-dev-secret-change-me-0123456789abcdef}
+    expiration-ms: ${JWT_EXPIRATION_MS:604800000}   # 7 天
+
+  # 定时任务 —— 只留 chat + LAP 的 job; DH 的 life/behavior/sleep 等 cron 随仓 2 走
+  scheduler:
+    # 会话线程衰减(ACTIVE/PAUSED → RESUMABLE → ABANDONED)
+    thread-maintenance-cron: 0 */20 * * * *
+    # LAP 幂等调用回收(默认每 5 分钟) — 崩溃遗留的 IN_PROGRESS 行靠它收敛到 EXPIRED
+    invocation-reaper-cron: '0 */5 * * * *'
+    # LAP 空闲会话回收(默认每天 04:30) — 结束长时间没人碰的 ApplicationSession。
+    # 频率刻意是"天"而不是"分钟": 一个会话卡住不影响任何人, 而误杀一个人正在玩的棋局会。
+    session-reaper-cron: '0 30 4 * * *'
+    # LAP 订阅投递轮询(默认每 5 秒) — "数字人怎么不理我"是用户能感知的时延。
+    lap-outbox-relay-cron: '*/5 * * * * *'
+    # V10 Outbox 可靠发布轮询(默认每 5 秒) — chat 写、Agent 平台消费的兜底通道
+    outbox-relay-cron: '*/5 * * * * *'
+
+  # ── LAP 应用平台 ────────────────────────
+  lap:
+    # WRITE/EXECUTE 的幂等键"在途"判定: 超过它才允许重试方 CAS 抢占。
+    invocation-timeout-ms: ${LAP_INVOCATION_TIMEOUT_MS:60000}
+    # 回收器判定"这行永远不会有人回填"的门槛, 必须远大于上面那个。
+    invocation-reap-after-ms: ${LAP_INVOCATION_REAP_AFTER_MS:900000}
+    # MCP 适配器的服务密钥; 留空 = MCP 完全关闭, 不是"无鉴权"
+    mcp:
+      service-key: ${LAP_MCP_SERVICE_KEY:}
+    # 空闲会话门槛。168 小时 = 7 天没碰过才结束。
+    session:
+      reap-idle-hours: ${LAP_SESSION_REAP_IDLE_HOURS:168}
+    # 订阅投递: 一轮取多少条、同一个事件失败几次才判死。
+    outbox:
+      batch-size: ${LAP_OUTBOX_BATCH_SIZE:50}
+      max-attempts: ${LAP_OUTBOX_MAX_ATTEMPTS:5}
+    # 远端应用。默认空 —— 密钥本身走 app.lap.remote.auth.<authRef>, 永不进 manifest。
+    remote-applications: ${LAP_REMOTE_APPLICATIONS:}
+    remote:
+      timeout-ms: ${LAP_REMOTE_TIMEOUT_MS:3000}
+      auth:
+        remote-gomoku: ${LAP_REMOTE_AUTH_REMOTE_GOMOKU:}
+
+  # ── 仿真 Agent 平台对接（G3 落地 HTTP 适配器; 现在先占位） ────────
+  agent-platform:
+    # 服务间共享密钥 —— 两仓环境变量注入同一个值; JWT 那层表达不了服务身份
+    internal-service-key: ${AGENT_PLATFORM_INTERNAL_KEY:luxera-chat-agent-internal-dev-key-change-me}
+    base-url: ${AGENT_PLATFORM_BASE_URL:http://127.0.0.1:8091}
+
+  # ── Simulator(DHCP): 聊天平台持有的仿真客户端接入面 ────────
+  simulator:
+    token-secret: ${SIMULATOR_TOKEN_SECRET:luxera-simulator-dhcp-v1-dev-secret-change-me}
+    token-ttl-seconds: 300
+    pairing-code-ttl-minutes: 10
+    # 仿真 Agent 平台连接本服务的 WS 地址
+    chat-ws-url: ${CHAT_WS_URL:ws://127.0.0.1:8081/ws/simulator}
