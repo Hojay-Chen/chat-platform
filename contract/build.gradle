@@ -30,6 +30,12 @@ publishing {
             groupId = 'com.luxera'
             artifactId = 'contract'
             version = '1.0.0'
+            // dependencyManagement(BOM) 声明的版本不会进 pom —— 用 resolved 版本发布,
+            // 仓 2 引入时才不需要自己再拼一套 BOM
+            versionMapping {
+                usage('java-api') { fromResolutionOf('runtimeClasspath') }
+                usage('java-runtime') { fromResolutionOf('runtimeClasspath') }
+            }
         }
     }
 }
