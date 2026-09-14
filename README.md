@@ -1,5 +1,12 @@
-# Luxera Companion — 长期陪伴型 AI 数字伴侣平台
+# chat-platform — 聊天平台 + 应用平台（仓 1）
 
+> **2026-09-14 G2 起本仓只承载聊天平台 + 应用平台**：digital-human-platform
+> 已整体迁往独立仓库 [simulation-agent-platform](../simulation-agent-platform)
+> （仓 2：数字人认知链 + 两个服务 —— 功能服务 8091 / 对外 OpenAPI 8092）。
+> 本仓经 `contract` 项目的 SPI 端口与仓 2 相见（`gradle :contract:publishToMavenLocal`
+> 发布 `com.luxera:contract:1.0.0` 供其引入）。下文历史章节中的 `digital-human-platform`
+> 相关描述均为 V10/LAP 时代的记录，以本注记为准。
+>
 > **不是 Chatbot**：拥有稳定人格、连续人生、持续记忆，随时间与用户建立关系，并在合适的时候主动找你。
 >
 > 设计依据：《Persistent AI Companion 产品与技术设计方案》（107 节）。当前为 **Digital Person 版**：
@@ -213,11 +220,25 @@ backend/
 
 ---
 
-## G1 物理拆分 · 聊天平台 Gradle 化（2026-09，进行中）
+## G1-G2 物理拆分（2026-09，G1/G2 已完成）
 
 > **目标**：聊天平台 + 应用平台一个仓库一个服务（由聊天平台启动类拉起），
 > 仿真 Agent 平台独立仓库独立进程；两套全新前端；仿真 Agent 的 OpenAPI 服务与聊天平台内的对接功能。
-> 分轮：**G1 仓 1 Gradle 化 → G2 仓 2 骨架+DH 迁移 → G3 跨服务 HTTP 化 → G4 OpenAPI 服务 → G5 聊天前端 → G6 Agent 管理前端 → G7 联调部署**。
+> 分轮：**G1 仓 1 Gradle 化 ✅ → G2 仓 2 骨架+DH 迁移 ✅ → G3 跨服务 HTTP 化 → G4 OpenAPI 服务 → G5 聊天前端 → G6 Agent 管理前端 → G7 联调部署**。
+
+### G2 已完成（2026-09-14）
+
+`backend/digital-human-platform`（443 文件）整体迁往仓 2 `simulation-agent-platform`
+（含 Maven 遗物 `backend/pom.xml`、`backend/run.sh` 一并清除，本仓 backend/ 目录不复存在）：
+
+- 仓 2 Gradle 多项目：`common`（kernel 类随迁，拷贝不剪切，两仓各自演化）/
+  `backend/digital-human-platform`（原路径名不变 —— git follow 穿历史的前提）/
+  `server`（功能服务 8091）/ `openapi`（对外 API 服务 8092，骨架）；
+- 仓 2 测试 **309 全绿**（G1 后这批测试从未在 Gradle 环境跑过，本次首次全绿）；
+  双 jar 起进程冒烟通过（8091 认知链定时任务运转 / 8092 health UP）；
+- 边界守卫 `scripts/check-agent.sh`（包归属互斥 / DH 白名单 import / common 不识 DH / 依赖图）；
+- git 历史经 ours-merge 嫁接保留全链（companion-agent 单体时代 → 现在），
+  本仓继续作为历史主链存在。
 
 ### G1 已完成（仓 1 Gradle 化）
 

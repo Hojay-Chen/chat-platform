@@ -1,6 +1,12 @@
-# chat-platform 架构说明（V10 多模块）
+# chat-platform 架构说明（V10 多模块 → G1/G2 拆分后）
 
 > 面向运维与二次开发。README 讲"做了什么"，本文讲"东西在哪、为什么这么切、怎么验证边界没被破坏"。
+>
+> **G2 起本文的"六个 Maven 模块"描述是历史记录**：digital-human-platform 已迁往独立仓库
+> `simulation-agent-platform`（仓 2），本仓只剩 Gradle 四项目 contract / common / application /
+> chat（`backend/` 目录已删）。仓 2 消费本仓 `contract` artifact（`gradle :contract:publishToMavenLocal`
+> → `com.luxera:contract:1.0.0`）。跨仓边界（两服务 8081/8091+8092、共库 companion、
+> outbox_event 通道、DHCP WS）见仓 2 README §4 与本文 §5 的分进程拓扑。
 
 ---
 
