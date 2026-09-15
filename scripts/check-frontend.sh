@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# G5 — 聊天前端验收: 双服务分流 + 端到端可达。
+# G8 — 聊天前端验收: 单入口(只调聊天平台) + 服务端转发 + 端到端可达。
 #
 # G1 拆分把伴侣域(companions CRUD / memories / relationship / …)迁到 8091,
-# 会话/消息/事件流留在 8081。前端 client.ts 的 route() 按"路径段"判定加
-# /agent 前缀, vite 代理双目标分流。本脚本起两服务, 经 vite 代理真验:
+# 会话/消息/事件流留在 8081。G5 让**前端**按路径段分流(加 /agent 前缀直连 8091),
+# G8 改为**后端**转发: 浏览器只认 companion.luxera.top 一个域名, /api/** 全进 8081,
+# 伴侣域由 8081 转给 8091。本脚本验的就是这件事。
 #
 #   F1 环境: 两 jar + PG + 前端依赖装好
-#   F2 双服务起: 8081 + 8091 同 key 同 JWT(复用 G3 check-split 的起服务方式)
-#   F3 8081 面可达: /api/health + 登录拿 JWT
-#   F4 8091 面可达: 同一 JWT GET /api/companions 列表(经 /agent/api 前缀)
-#   F5 vite 代理分流: 起 vite dev, /agent/api → 8091 / /api → 8081
-#      — 用 route() 的判定逻辑直连两服务(不经浏览器, 直接 curl 经 vite)
+#   F2 双服务起: 8081 + 8091 同 key 同 JWT
+#   F3 8081 登录拿 JWT
+#   F4 单入口分流(经 8081, 带真 JWT) —— 本脚本的核心:
+#        · 伴侣域写/读确实到了 8091(建伴侣、读详情、读记忆)
+#        · 会话域留在 8081(auth/me、会话列表)
+#        · /conversations/first 不再 404  ← G5 的回归点
+#   F5 vite 代理单目标: /api → 8081; /agent/api 不再被代理
 #
 # 用法: bash scripts/check-frontend.sh   (自动起停 vite; 两服务用已在跑的或自起)
 set -euo pipefail
@@ -49,8 +52,11 @@ wait_up() { local url="$1" tries="${2:-30}"; for _ in $(seq 1 "$tries"); do curl
 up8091() { [ "$(curl -s -o /dev/null -w '%{http_code}' -m 2 "$AGT_BASE/" 2>/dev/null || echo 000)" != "000" ]; }
 psqlc() { PGPASSWORD=shared-secret psql -h 127.0.0.1 -U admin -d companion -tAc "$@"; }
 
+# 带 JWT 打 8081, 只回状态码
+code() { curl -s -o /dev/null -w '%{http_code}' -m "${3:-15}" -H "Authorization: Bearer $TOKEN" "$BASE$1" ${2:+-X "$2"}; }
+
 echo ""
-echo "══════════ G5 聊天前端验收 (check-frontend) ══════════"
+echo "══════════ G8 聊天前端验收 (check-frontend) ══════════"
 
 # ── F1 环境 ──
 note "F1: 环境就绪"
@@ -70,7 +76,7 @@ if ! curl -s -m 2 -o /dev/null "$BASE/api/health"; then
       LAP_MCP_SERVICE_KEY=check-frontend-mcp-key \
       java -jar "$CHAT_JAR" ) > "$TMP/chat.log" 2>&1 &
   PIDS+=("$!")
-  wait_up "$BASE/api/health" 60 && ok "chat 起来" || fail "8081 没起来"
+  wait_up "$BASE/api/health" 60 && ok "chat 起来" || fail "8081 没起来: $(tail -3 "$TMP/chat.log")"
 else
   ok "chat 已在跑 (复用)"
 fi
@@ -85,7 +91,7 @@ else
   ok "agent-server 已在跑 (复用)"
 fi
 
-# ── F3 8081 面: 登录 ──
+# ── F3 登录 ──
 note "F3: 8081 登录拿 JWT"
 USERNAME="fe-$(date +%s)"
 PASS="check-frontend-pass"
@@ -103,33 +109,76 @@ TOKEN=$(curl -s -m 15 -X POST "$BASE/api/auth/login" -H 'Content-Type: applicati
   -d "{\"username\":\"$USERNAME\",\"password\":\"$PASS\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("token",""))' 2>/dev/null)
 [ -n "$TOKEN" ] && ok "8081 登录: JWT ${TOKEN:0:20}…" || { fail "8081 登录失败"; echo ""; echo "❌ 验收未通过"; exit 1; }
 
-# ── F4 8091 面: 同一 JWT GET /api/companions ──
-note "F4: 同一 JWT 8091 GET /api/companions"
-AGT_CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$AGT_BASE/api/companions")
-[ "$AGT_CODE" = "200" ] && ok "8091 认同一 JWT (GET /api/companions 200)" || fail "8091 期望 200, 实得 $AGT_CODE"
+# ── F4 单入口分流(核心) ──
+note "F4: 浏览器只打 8081 —— 伴侣域由 8081 服务端转给 8091"
 
-# ── F5 vite 代理分流 ──
-note "F5: vite 代理分流(/agent/api→8091, /api→8081)"
+# 4a. 会话域/auth 留在 8081
+ME=$(code /api/auth/me)
+[ "$ME" = "200" ] && ok "/api/auth/me → 8081 (200, 本地)" || fail "/api/auth/me 期望 200, 实得 $ME"
+
+# 4b. 伴侣域写: POST /api/companions 建伴侣 —— G1 后 8081 没有这个端点, 必须转到 8091。
+#     请求体形状照 CompanionCreate.tsx 的真实调用: persona 是**对象**不是字符串
+#     (写成 {"persona":"x"} 会 400 —— 那不是转发的问题, 直连 8091 同样 400;
+#     想在验收里分辨"转发错了"和"我构造错了", 就记住两者的响应必须一模一样)。
+#     create 只给 persona.identity + relationship, 不走 /compile —— 那条要 LLM,
+#     验收不该依赖外部 API。
+CID=$(curl -s -m 20 -X POST "$BASE/api/companions" -H "Authorization: Bearer $TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d '{"persona":{"identity":{"name":"验收伴侣","gender":"female"},"relationship":{"type":"friend"}},"greeting":"你好"}' \
+      | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))' 2>/dev/null)
+if [ -n "$CID" ]; then
+  ok "POST /api/companions → 8091 建伴侣成功 (id=$CID) —— 写入也走转发"
+else
+  fail "POST /api/companions 没拿到伴侣 id —— 伴侣域写入没到 8091"
+  echo ""; echo "❌ 验收未通过(后续读取没有对象可验)"; exit 1
+fi
+
+# 4c. 伴侣域读: 详情 + 记忆(两个都在 8091)
+DET=$(code "/api/companions/$CID")
+[ "$DET" = "200" ] && ok "GET /api/companions/{id} → 8091 (200)" || fail "伴侣详情期望 200, 实得 $DET"
+MEM=$(code "/api/companions/$CID/memories")
+[ "$MEM" = "200" ] && ok "GET /api/companions/{id}/memories → 8091 (200)" || fail "记忆期望 200, 实得 $MEM"
+
+# 4d. ★ G5 回归点: conversations/first 是 8091 的端点(开/复用会话, 回 ConversationView),
+#     但路径段是 conversations —— G5 的段规则把它判给了 8081, 实测 404。这里断言它
+#     **不再是 404**。不要求 200: 它会真的跑认知链(可能要 LLM), 只验"路由到位"(500 也算到位)。
+FIRST=$(code "/api/companions/$CID/conversations/first" POST 10)
+if [ "$FIRST" = "404" ]; then
+  fail "/conversations/first 实得 404 —— 又被判给 8081 了(G5 的回归)"
+elif [ "$FIRST" = "000" ]; then
+  ok "/conversations/first 已到 8091 并开始响应(10s 截断, 无完整状态码)"
+else
+  ok "/conversations/first 已到 8091 (实得 $FIRST, 非 404)"
+fi
+
+# ── F5 vite 代理单目标 ──
+note "F5: vite 单目标(/api → 8081); /agent/api 不再被代理"
 ( cd "$ROOT/frontend" && exec npm run dev ) > "$TMP/vite.log" 2>&1 &
 PIDS+=("$!")
-wait_up "$VITE" 40 || { fail "vite dev 没起来: $(tail -3 "$TMP/vite.log")"; }
+wait_up "$VITE" 40 || fail "vite dev 没起来: $(tail -3 "$TMP/vite.log")"
 
-# /api/auth/me → 应到 8081(经 vite 代理 /api)
-ME_CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$VITE/api/auth/me")
-[ "$ME_CODE" = "200" ] && ok "/api → 8081 (/api/auth/me 200)" || fail "/api 期望 200, 实得 $ME_CODE"
+ME_V=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$VITE/api/auth/me")
+[ "$ME_V" = "200" ] && ok "/api → 8081 (/api/auth/me 200)" || fail "/api 期望 200, 实得 $ME_V"
 
-# /agent/api/companions → 应到 8091(经 vite 代理 /agent/api, rewrite 去 /agent)
-COMP_CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$VITE/agent/api/companions")
-[ "$COMP_CODE" = "200" ] && ok "/agent/api → 8091 (/api/companions 200)" || fail "/agent/api 期望 200, 实得 $COMP_CODE"
+# 伴侣域经 vite 也必须通 —— 它同样是 /api 前缀, 由 8081 转发
+MEM_V=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$VITE/api/companions/$CID/memories")
+[ "$MEM_V" = "200" ] && ok "/api/companions/{id}/memories 经 vite 仍 200(8081 转发)" || fail "经 vite 记忆期望 200, 实得 $MEM_V"
 
-# 反向验证: /api/companions(不加 /agent)→ 应该 404(因为 8081 没这个端点)
-WRONG_CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$VITE/api/companions")
-[ "$WRONG_CODE" = "404" ] && ok "/api/companions(无 /agent 前缀) → 8081 → 404 (分流正确: 该端点在 8091)" \
-  || fail "/api/companions 期望 404(8081 没此端点), 实得 $WRONG_CODE — 分流错了"
+# /agent/api/** 必须**不再**是有效路径。
+#
+# 判据是 Content-Type 不是状态码: vite 的 SPA 回退对任何未匹配路径都回
+# index.html + **200** —— 于是"200"既可能是"旧代理还在"(200 + JSON)也可能是
+# "已经删干净"(200 + HTML)。用状态码判会把正确状态报成失败(第一版就报错了)。
+# 有意义的判据是"响应还是不是一份 API 的 JSON"。
+AGENT_CT=$(curl -s -o /dev/null -w '%{content_type}' -H "Authorization: Bearer $TOKEN" "$VITE/agent/api/companions")
+case "$AGENT_CT" in
+  application/json*) fail "/agent/api/** 仍返回 JSON —— 旧的直连 8091 通道没清干净" ;;
+  *) ok "/agent/api/** 不再是 API 路径 (Content-Type: ${AGENT_CT:-无}) —— 前端无直连 8091 的通道" ;;
+esac
 
 echo ""
 if [ "$FAIL" = "0" ]; then
-  echo "✅ 聊天前端验收通过 (G5 — 双服务分流 + 端到端可达)"
+  echo "✅ 聊天前端验收通过 (G8 — 单入口 + 服务端转发 + 端到端可达)"
 else
   echo "❌ 聊天前端验收未通过"
   echo "   日志: $TMP"

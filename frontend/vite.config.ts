@@ -23,16 +23,14 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     proxy: {
-      // G5 —— 双服务分流。顺序敏感: /agent/api 必须在 /api 之前,
-      // 否则伴侣域请求会被默认规则抢去 8081。物理 URL 前缀由
-      // src/api/client.ts 的 route() 决定(与生产 nginx G7 同一套规则):
-      //   /agent/api/... → 8091(仿真 Agent 平台: 伴侣 CRUD/记忆/关系/生活/…)
-      //   /api/...       → 8081(聊天平台: auth/会话/消息/事件流/应用)
-      '/agent/api': {
-        target: 'http://127.0.0.1:8091',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/agent/, ''),
-      },
+      // G8 —— 单目标。开发态与生产态(nginx)现在是同一个形状: 浏览器只跟
+      // 聊天平台说话, /api/** 全部进 8081。伴侣域(记忆/关系/生活/… )与流式聊天
+      // 由 8081 在服务端转给 8091 —— 8091 在这条链路上不再有浏览器可见的入口。
+      //
+      // 这里曾有第二条 '/agent/api' → 8091 的代理(顺序敏感, 必须在 '/api' 之前),
+      // 与前端 route() 的前缀改写配套。两者一并删除: 让浏览器直连两个后端,
+      // 等于把"聊天平台的界面"定义成两个后端 API 的并集, 域名的边界和代码的边界
+      // 对不上; 而且按路径段判归属的做法把 conversations/first 与 .../chat 判错了服务。
       '/api': {
         target: 'http://127.0.0.1:8081',
         changeOrigin: true,
