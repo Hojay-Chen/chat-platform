@@ -7,7 +7,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      // import.meta.dirname 而非 __dirname —— vite 8 起 configLoader 默认走原生
+      // ESM, __dirname 会触发 "unsupported by configLoader: native" 警告
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
   test: {

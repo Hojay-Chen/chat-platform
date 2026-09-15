@@ -321,6 +321,45 @@ events / threads / applications）与 auth、应用平台（/api/v1）仍留在 
 登录 → /api/auth/me 经 vite 走 8081 → /agent/api/companions 走 8091 →
 反向验证 /api/companions 不加前缀在 8081 回 404）。前端 60 测试 + build 绿。
 
+### G6 / G7 已完成（2026-09-16）—— 仓 2 控制台与其部署（本仓不动）
+
+G6/G7 全部落在**仓 2**（[simulation-agent-platform](../simulation-agent-platform)），
+本仓源码与前端均未改动 —— 两个前端是两套独立产物（用户拍板），靠 nginx 域名分流
+共存，而不是塞进同一个 SPA。
+
+- **G6** 仓 2 新增 `frontend/` 管理控制台（agent 列表/详情/创建、API 客户端发放与
+  吊销、agent 实时状态）。与 G5 那条 `route()` 的**关键差别**：控制台只打**一个**
+  后端 8092，分流不在"主机"而在**"面"**（管理钥 `X-Admin-Key` vs 客户端钥
+  `Bearer sap_...`）—— `faceOf(url)` 判定该带哪把钥匙。计划里"状态走 8091"的
+  那一项落地时被否掉了：8091 的 `StateController` 要用户 JWT，控制台没有。
+- **G7** nginx 新增 `agent.luxera.top`（`deploy/nginx/agent.luxera.top.conf` 在仓 2
+  版本库，`scripts/deploy.sh` 安装），与 `companion.conf` **并存互不干扰**：
+  - `agent.luxera.top` → 仓 2 控制台 `/var/www/agent` + `/api/` → 8092（**单上游**）
+  - `companion.luxera.top` → 本仓前端 `/var/www/companion` + **双上游**：
+    `/api/` → 8081，`/agent/api/` → 8091（去 `/agent` 前缀，与 G5 vite 的
+    `path.replace(/^\/agent/, '')` 一一对应）。**这一条是 G7 补上的 G5 欠账** ——
+    G5 只落了 dev 侧（vite rewrite），README 里那句"G7 生产 nginx 同一套前缀规则"
+    在本轮之前没有落点：线上伴侣域请求会全部落到 `location /` 的 SPA 回退上，
+    dev 一切正常而线上静默 404。配置源头是本仓 `deploy/nginx/companion.conf`。
+  - 鉴权分层：控制台静态页套 Authelia 前门，`/api/**` **不套**（三方机器客户端
+    拿 401 而不是 302 登录跳转）。这条差异是本轮部署最要紧的一处，详见仓 2 README §7 G7。
+    `companion.luxera.top` **未套** Authelia（现状保持，是否加套由用户定）。
+- **G7 首次真机部署在本仓抓出四个缺陷**（都是"单看一个仓完全看不出来"的那类）：
+  1. `scripts/deploy.sh` 的 `NGINX_SRC` 指向 `infrastructure/nginx/sites/` —— 那棵树
+     停在 8 月（没有 `/agent/api` 落点），**每次跑 deploy.sh 都会把线上配置悄悄倒退回
+     拆分前**。已改为指向本仓 `deploy/nginx/companion.conf`，并加装前备份 + 校验失败回滚。
+  2. systemd 单元的 `WorkingDirectory` 指向 `chat-platform/backend`，而 `backend/` 在
+     G1 物理拆分后已不存在 —— 后端自 G1 起就没起来过，按 `Restart=always` 每 5s
+     无声重试。已改指仓库根。
+  3. 单元只读 `/etc/companion/.env`（只有 DEEPSEEK），**没读跨仓共享密钥**，于是 8081
+     用 yml dev 默认值签 JWT、8091 用随机共享密钥验签 → 跨服务全线 403。已加
+     `EnvironmentFile=-/etc/luxera/shared-secrets.env`。
+  4. `check-frontend.sh` 拿 `/api/health` 探 8091，而 8091 **没有**这个映射 —— 会把
+     正常运行的 8091 判成"没起"，然后去起第二个实例撞端口。已改为"有 HTTP 响应即活着"。
+     同脚本还有 `( cd X && java … & )` 的子 shell-PID 陷阱（$! 是子 shell 的 pid，
+     cleanup 杀不到 java，留下孤儿占端口），已按仓 2 的做法改成 `exec` + `kill_tree`。
+  详见仓 2 README §8.1–8.3（共享密钥、8091 无健康端点、内存封顶）。
+
 ### 构建口径（G1 起）
 
 ```bash

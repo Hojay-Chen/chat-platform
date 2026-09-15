@@ -30,10 +30,23 @@ FAIL=0
 note() { echo "==> $*"; }
 ok() { echo "    ✓ $*"; }
 fail() { echo "    ✗ $*"; FAIL=1; }
-cleanup() { for p in "${PIDS[@]:-}"; do kill "$p" 2>/dev/null || true; done; }
+# 递归杀整棵树 —— npm run dev 会 fork 出 node/vite, 只杀直接子进程会留下
+# 孤儿继续占着 5173, 下一个脚本复用到它, 拿到的是上个脚本的状态。
+kill_tree() {
+  local pid="$1" child
+  for child in $(pgrep -P "$pid" 2>/dev/null); do kill_tree "$child"; done
+  kill "$pid" 2>/dev/null || true
+}
+cleanup() { for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill_tree "$p"; done; }
 trap cleanup EXIT
 
 wait_up() { local url="$1" tries="${2:-30}"; for _ in $(seq 1 "$tries"); do curl -s -m 2 -o /dev/null "$url" && return 0 || true; sleep 2; done; return 1; }
+
+# 8091 **没有** /api/health 这个映射 —— 探它是 404。但 404 恰恰证明服务活着:
+# 端口没人监听时 curl 拿不到任何状态码(000)。拿 /api/health 当探针会得出
+# "8091 没起"的错误结论, 于是去起第二个实例、撞端口, 再报一次"没起来"。
+# 判据是"有没有 HTTP 响应", 不是"状态码是不是 200"。
+up8091() { [ "$(curl -s -o /dev/null -w '%{http_code}' -m 2 "$AGT_BASE/" 2>/dev/null || echo 000)" != "000" ]; }
 psqlc() { PGPASSWORD=shared-secret psql -h 127.0.0.1 -U admin -d companion -tAc "$@"; }
 
 echo ""
@@ -50,20 +63,24 @@ psqlc "select 1" >/dev/null 2>&1 && ok "PG 在" || { fail "PG 不可达"; }
 # ── F2 双服务起 ──
 note "F2: 双服务起(复用已在跑的)"
 if ! curl -s -m 2 -o /dev/null "$BASE/api/health"; then
-  ( cd "$ROOT" && AGENT_PLATFORM_INTERNAL_KEY="$KEY" AGENT_PLATFORM_BASE_URL="$AGT_BASE" \
+  # exec 让子 shell **变成** java —— 否则 `&` 绑定的是整个 `cd && java` 列表,
+  # $! 拿到的是子 shell 的 pid, cleanup 杀掉子 shell 后 java 变孤儿继续占
+  # 8081, 下一个脚本复用到它、撞上另一套配置, 报错却指向别处。
+  ( cd "$ROOT" && exec env AGENT_PLATFORM_INTERNAL_KEY="$KEY" AGENT_PLATFORM_BASE_URL="$AGT_BASE" \
       LAP_MCP_SERVICE_KEY=check-frontend-mcp-key \
-      java -jar "$CHAT_JAR" > "$TMP/chat.log" 2>&1 & echo $! > "$TMP/chat.pid" )
-  PIDS+=("$(cat "$TMP/chat.pid")")
+      java -jar "$CHAT_JAR" ) > "$TMP/chat.log" 2>&1 &
+  PIDS+=("$!")
   wait_up "$BASE/api/health" 60 && ok "chat 起来" || fail "8081 没起来"
 else
   ok "chat 已在跑 (复用)"
 fi
-if ! curl -s -m 2 -o /dev/null "$AGT_BASE/api/health"; then
-  ( cd "$AGT_ROOT" && AGENT_PLATFORM_INTERNAL_KEY="$KEY" CHAT_PLATFORM_BASE_URL="$BASE" \
+if ! up8091; then
+  ( cd "$AGT_ROOT" && exec env AGENT_PLATFORM_INTERNAL_KEY="$KEY" CHAT_PLATFORM_BASE_URL="$BASE" \
       JWT_SECRET=luxera-companion-platform-dev-secret-change-me-0123456789abcdef \
-      java -jar "$AGT_JAR" > "$TMP/agent.log" 2>&1 & echo $! > "$TMP/agent.pid" )
-  PIDS+=("$(cat "$TMP/agent.pid")")
-  wait_up "$AGT_BASE/api/health" 60 && ok "agent-server 起来" || fail "8091 没起来"
+      java -jar "$AGT_JAR" ) > "$TMP/agent.log" 2>&1 &
+  PIDS+=("$!")
+  for _ in $(seq 1 60); do up8091 && break || sleep 2; done
+  up8091 && ok "agent-server 起来" || { fail "8091 没起来: $(tail -3 "$TMP/agent.log")"; }
 else
   ok "agent-server 已在跑 (复用)"
 fi
@@ -93,8 +110,8 @@ AGT_CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOK
 
 # ── F5 vite 代理分流 ──
 note "F5: vite 代理分流(/agent/api→8091, /api→8081)"
-( cd "$ROOT/frontend" && npm run dev > "$TMP/vite.log" 2>&1 & echo $! > "$TMP/vite.pid" )
-PIDS+=("$(cat "$TMP/vite.pid")")
+( cd "$ROOT/frontend" && exec npm run dev ) > "$TMP/vite.log" 2>&1 &
+PIDS+=("$!")
 wait_up "$VITE" 40 || { fail "vite dev 没起来: $(tail -3 "$TMP/vite.log")"; }
 
 # /api/auth/me → 应到 8081(经 vite 代理 /api)
