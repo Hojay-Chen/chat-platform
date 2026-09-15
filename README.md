@@ -7,6 +7,12 @@
 > 发布 `com.luxera:contract:1.0.0` 供其引入）。下文历史章节中的 `digital-human-platform`
 > 相关描述均为 V10/LAP 时代的记录，以本注记为准。
 >
+> **两个域名，各管各的（G8 起）**：`companion.luxera.top` → 本仓（前端静态 + `/api/**`
+> → 8081），`agent.luxera.top` → 仓 2（控制台静态 + `/api/v1/openapi/` 与 `/api/health`
+> → 8092 + 其余 `/api/` → 8091）。**浏览器只跟聊天平台的后端说话** —— 聊天平台调仿真
+> Agent 平台是**后端调后端**：伴侣域请求由 8081 在服务端转给 8091，前端不做任何分流。
+> 详见 §G8。
+>
 > **不是 Chatbot**：拥有稳定人格、连续人生、持续记忆，随时间与用户建立关系，并在合适的时候主动找你。
 >
 > 设计依据：《Persistent AI Companion 产品与技术设计方案》（107 节）。当前为 **Digital Person 版**：
@@ -224,7 +230,11 @@ backend/
 
 > **目标**：聊天平台 + 应用平台一个仓库一个服务（由聊天平台启动类拉起），
 > 仿真 Agent 平台独立仓库独立进程；两套全新前端；仿真 Agent 的 OpenAPI 服务与聊天平台内的对接功能。
-> 分轮：**G1 仓 1 Gradle 化 ✅ → G2 仓 2 骨架+DH 迁移 ✅ → G3 跨服务 HTTP 化 ✅ → G4 OpenAPI 服务 → G5 聊天前端 → G6 Agent 管理前端 → G7 联调部署**。
+> 分轮：**G1 仓 1 Gradle 化 ✅ → G2 仓 2 骨架+DH 迁移 ✅ → G3 跨服务 HTTP 化 ✅ → G4 OpenAPI 服务 ✅ → G5 聊天前端 ⚠️ 方向被推翻 → G6 Agent 管理前端 ✅ → G7 联调部署 ✅ → G8 前端单入口（后端转伴侣域）✅**。
+>
+> **G5 被推翻的地方**：它让**前端**按路径段分流、加 `/agent` 前缀直连 8091。这是错的 ——
+> 聊天平台的前端只能调聊天平台的后端，聊天平台调仿真 Agent 平台指的是**后端调后端**。
+> G8 已改为浏览器单入口、伴侣域由 8081 在服务端转发。详见 §G8。
 
 ### G3 已完成（2026-09-15）—— 跨服务 HTTP 化
 
@@ -294,7 +304,11 @@ build.gradle 依赖图 / contract 零仓内依赖）→ `gradle test` **466 全�
    语义（V10 §2.1）的红利：Agent 平台缺席时聊天平台不残废。**（G3 已兑现：占位删除，
    `HttpCompanionDirectoryAdapter` 常驻；见 G3 段。）**
 
-### G5 已完成（2026-09-15）—— 聊天前端双服务适配
+### G5 已完成但**方向已被 G8 推翻**（2026-09-15）—— 聊天前端双服务适配
+
+> ⚠️ **本节描述的 `/agent` 前缀分流方案已经不存在了。** 保留原文只为记录当时的
+> 判断与它为什么错 —— 判据（按"路径段"猜端点归属）本身是错的，见 §G8。现在前端
+> 零分流、`route()` 已删除、`/agent/api` 通道已从 vite 与 nginx 两侧移除。
 
 前端（`frontend/`）在 G1 前就已是成熟的暖棕 IM 风（侧栏会话、气泡、已读回执、
 打字指示器、连发聚合、SSE 持久事件流、应用卡片、六个抽屉面板），**G5 的硬伤不是
@@ -334,13 +348,17 @@ G6/G7 全部落在**仓 2**（[simulation-agent-platform](../simulation-agent-pl
   那一项落地时被否掉了：8091 的 `StateController` 要用户 JWT，控制台没有。
 - **G7** nginx 新增 `agent.luxera.top`（`deploy/nginx/agent.luxera.top.conf` 在仓 2
   版本库，`scripts/deploy.sh` 安装），与 `companion.conf` **并存互不干扰**：
-  - `agent.luxera.top` → 仓 2 控制台 `/var/www/agent` + `/api/` → 8092（**单上游**）
+  - `agent.luxera.top` → 仓 2 控制台 `/var/www/agent` + `/api/` → 8092（**单上游**。
+    **G8 已改为按前缀分两个上游**：`/api/v1/openapi/` 与 `/api/health` 仍归 8092，
+    其余 `/api/` 归 8091 —— 平台自身功能面得在自己域名下可达）
   - `companion.luxera.top` → 本仓前端 `/var/www/companion` + **双上游**：
     `/api/` → 8081，`/agent/api/` → 8091（去 `/agent` 前缀，与 G5 vite 的
     `path.replace(/^\/agent/, '')` 一一对应）。**这一条是 G7 补上的 G5 欠账** ——
     G5 只落了 dev 侧（vite rewrite），README 里那句"G7 生产 nginx 同一套前缀规则"
     在本轮之前没有落点：线上伴侣域请求会全部落到 `location /` 的 SPA 回退上，
     dev 一切正常而线上静默 404。配置源头是本仓 `deploy/nginx/companion.conf`。
+    **G8 已把这条第二上游删除** —— 现在只有 `/api/` → 8081 一个上游，
+    `/agent/api/` 不再存在。
   - 鉴权分层：控制台静态页套 Authelia 前门，`/api/**` **不套**（三方机器客户端
     拿 401 而不是 302 登录跳转）。这条差异是本轮部署最要紧的一处，详见仓 2 README §7 G7。
     `companion.luxera.top` **未套** Authelia（现状保持，是否加套由用户定）。
@@ -360,17 +378,78 @@ G6/G7 全部落在**仓 2**（[simulation-agent-platform](../simulation-agent-pl
      cleanup 杀不到 java，留下孤儿占端口），已按仓 2 的做法改成 `exec` + `kill_tree`。
   详见仓 2 README §8.1–8.3（共享密钥、8091 无健康端点、内存封顶）。
 
+### G8 已完成（2026-09-16）—— 前端单入口，伴侣域改由 8081 服务端转发
+
+**用户对 G5 的架构纠正**：*"为什么聊天平台前端会调用到仿真 agent 平台的接口？我让你
+聊天平台调用仿真 agent 平台是指后端调用，聊天平台的前端肯定只能调用聊天平台后端啊"*
+—— 以及域名侧：*"聊天平台应该是一个域名，然后仿真 agent 自己一个域名，然后其 openapi
+放在其域名下"*。G5 让浏览器直连两个后端（`route()` 加 `/agent` 前缀 + nginx/vite 两条
+通道），方向从一开始就是错的：它把内网拓扑铺进了前端，前端还要维护一张"哪条路径属于谁"
+的表。
+
+**现在的分工**（`CompanionDomainProxyController`，新增）：
+
+- 浏览器只认 `companion.luxera.top` 一个域名，`/api/**` 全进 8081
+- 伴侣域请求（8081 没实现的那些）由 8081 在**服务端**用 JDK `HttpURLConnection`
+  流式转给 8091，响应原样回传（不缓冲响应头，否则 SSE 变成"等想完一次性吐出"）
+- **转发带的是调用方自己的 JWT，不是 HMAC 服务身份** —— 用服务身份会让 8081 变成
+  绕过 8091 归属校验的 confused deputy
+- 判归属的依据是 **Spring 的 HandlerMapping 优先级**（"8081 到底实现了什么"），
+  不是路径段：8081 自己实现的端点有更精确的映射，赢过 `/api/companions/**` 兜底
+
+**顺带查实 G5 的一个真实功能缺陷**：段规则把整个 `conversations` 段判给 8081，而
+`POST .../conversations/first` 与 `POST .../conversations/{cid}/chat` 都是 8091 的端点
+—— 主链路 404（实测 8081→404、8091→500 证实）。G5 那 36 条 `route()` 断言没拦住，
+**因为它们的判据就是那张错表本身**：覆盖了 `conversations/{cid}/messages`（确实属 8081），
+却从没覆盖 `first` 和 `chat`。一个错的判据可以被一千条断言钉得死死的。
+
+**验收**：
+- `CompanionDomainRoutingTest` **30 条**用例断言**哪个处理器**接走（不依赖下游服务，
+  只钉路由规则），前两条就是上述回归点
+- `client.route.test.ts`（36 断言）→ `client.single-origin.test.ts`（3 断言）：不再导出
+  `route`、源码无 `/agent` 字面量、URL 面就是字面意思
+- `scripts/check-frontend.sh` 重写为 F1–F5 单入口验收 → **全绿**（含经 8081 建伴侣、
+  读记忆、`/conversations/first` 非 404，以及 `/agent/api/**` 已不是 API 路径）
+- 仓 1 测试 **474 → 477**（新增 `CompanionDomainRoutingTest` 3 条 + `InternalWorldTimeParamTest`
+  3 条，见 §两个缺陷），前端 27 测试 + tsc 干净
+
+**同轮修掉的两个缺陷**（都是验证 G8 时发现的，与 G8 本身无关但被它暴露）：
+
+1. **`/internal/world` 的时间参数解析**（`InternalChatWorldController`）—— 四个
+   `@RequestParam LocalDateTime` 都没带 `@DateTimeFormat`，走的是 Spring Boot 的**本地化**
+   默认格式器（不是 ISO），而仓 2 用 `ISO_LOCAL_DATE_TIME` 发串。于是每一个带 since/until
+   的服务间读请求都在 8081 抛 `DateTimeParseException` → 500，仓 2 只记一条 WARN 就降级：
+   不报错、不缺页，只是数字人读不到用户历史消息，**静默变笨**。四参数一起加
+   `@DateTimeFormat(iso = DATE_TIME)`，`InternalWorldTimeParamTest` 钉住调用方真正发出的
+   那种串（9 位/8 位/整秒三种）。已真机验证：四条路径全部 200，日志零复现。
+   排查弯路：一度误判成"纳秒位数问题"，但单独 `LocalDateTime.parse` 那个串是成功的 ——
+   **问题不在值，在转换器选错了格式器**；写成测试才定死（连整秒无小数位也是 500）。
+2. **`deploy.sh` 以 root 构建** —— 脚本整体要 root，但 `sudo bash scripts/deploy.sh` 会让
+   Gradle 以 root 写 `build/`，class 文件变 `root:root`，之后以 ubuntu 跑任何 gradle 任务
+   都死在 `Unable to delete directory ... Permission denied`，且 Gradle 把原因包装成
+   "本地构建缓存条目损坏"，与真正的权限问题毫不相干。已改为按 `$SUDO_USER` 构建;
+   仓 2 的 `deploy.sh` 同一个坑（`npm run build`）一并加上。
+
 ### 构建口径（G1 起）
 
 ```bash
 cd chat-platform
 bash scripts/check-v10.sh                 # 边界守卫（Gradle 版）
-~/tools/gradle/gradle-8.14.3/bin/gradle test        # 466 测试
+~/tools/gradle/gradle-8.14.3/bin/gradle test        # 477 测试（G8 后）
 ~/tools/gradle/gradle-8.14.3/bin/gradle :chat:bootJar   # chat-platform-1.0.0.jar
 LAP_MCP_SERVICE_KEY=<key> java -jar chat/build/libs/chat-platform-1.0.0.jar
 CHECK_MODE=split bash scripts/check.sh             # 聊天侧
 LAP_AGENT_MODE=split LAP_LOG=<log> bash scripts/check-lap.sh   # 平台侧
 bash scripts/check-remote-app.sh && bash scripts/check-ecosystem.sh
+
+cd frontend && npx tsc --noEmit && npx vitest run   # 27 测试
+bash scripts/check-frontend.sh                      # G8 单入口端到端验收（需两服务同起）
+sudo bash scripts/deploy.sh                         # 部署（构建自动降权到 $SUDO_USER）
+```
+
+> ⚠️ `deploy.sh` 必须 `sudo` 跑（要写 `/etc/nginx`、`/var/www`、重启 systemd），
+> 但**构建步骤会自动以 `$SUDO_USER` 执行** —— 不要让 Gradle/npm 以 root 写 `build/`
+> 与 `dist/`，否则后续以 ubuntu 跑任何构建任务都会 `Permission denied`（见 §G8 缺陷 2）。
 ```
 
 ---
