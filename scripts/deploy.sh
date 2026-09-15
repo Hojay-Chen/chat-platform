@@ -17,9 +17,20 @@ NGINX_DST=/etc/nginx/conf.d/companion.conf
 WEB_ROOT=/var/www/companion
 BACKUP_DIR=/var/backups/luxera-companion
 
-echo "==> 1. 编译打包(Gradle, chat 平台)"
+# 本脚本整体要 root(写 /etc/nginx、/var/www、重启 systemd), 但**构建不能以 root 跑**。
+# `sudo bash scripts/deploy.sh` 会让下面的 Gradle 以 root 身份写 build/ —— class 文件
+# 变成 root:root, 之后再以 ubuntu 跑任何 gradle 任务都会死在
+#   Unable to delete directory '.../build/classes/java/main' ... Permission denied
+# 且 Gradle 把原因报成"本地构建缓存条目损坏", 与真正的权限问题毫不相干(排查代价: 很久)。
+# 以仓库属主身份构建, 产物权限就始终跟着工作区走。
+BUILD_USER="${SUDO_USER:-$(id -un)}"
+as_build_user() {
+  if [ "$(id -un)" = "$BUILD_USER" ]; then "$@"; else sudo -H -u "$BUILD_USER" -- "$@"; fi
+}
+
+echo "==> 1. 编译打包(Gradle, chat 平台, 以 $BUILD_USER 身份)"
 cd /home/ubuntu/claude-workspace/chat-platform
-$GRADLE -q :chat:bootJar
+as_build_user "$GRADLE" -q :chat:bootJar
 test -f "$BACKEND_JAR" || { echo "打包失败: $BACKEND_JAR 不存在"; exit 1; }
 
 test -f "$FRONTEND_DIST/index.html" || { echo "缺前端产物 $FRONTEND_DIST —— 先 cd frontend && npm run build"; exit 1; }
@@ -111,26 +122,41 @@ else
   echo "   拉起: sudo systemctl start luxera-agent-server"
 fi
 
-echo "==> 8. 分流落点体检"
+echo "==> 8. 单入口路由体检"
 # reload 后老 worker 还会短暂服务几秒, 立刻断言会假阴性 —— 先等健康端点稳定
 for _ in $(seq 1 8); do
   curl -sf http://127.0.0.1:8081/api/health >/dev/null 2>&1 && break || sleep 2
 done
-# 关键断言: /agent/api/ 必须**不再**落到 SPA 回退。
-# 少这段 location 时它返回的是 index.html(HTTP 200) —— 不是 404, 所以肉眼
-# 完全看不出问题, 只有前端拿着 HTML 去 JSON.parse 时才炸。
+# 本步只验**路由**, 不验功能: 带 JWT 的功能验收在 scripts/check-frontend.sh
+# (它建伴侣、读记忆、验 conversations/first 到没到 8091)。这里要抓的是部署期
+# 特有的那一类错 —— 路径悄悄落到 SPA 回退上。
 #
-# ⚠ 必须打 https —— 打 http 拿到的是 80 端口那条 `return 301`, 301 会让这个
+# 为什么盯 Content-Type 而不是状态码: 未带 JWT 时 SecurityConfig 的
+# anyRequest().authenticated() 一律回 403, 无论处理器存不存在 —— 于是
+# "403" 既可能是"路由对了被拦"也可能是"路由错了被拦", 分辨不出来。但
+# **HTML 一定是错的**: 落进 `location /` 的 SPA 回退才会回 text/html。
+# 这正是 G5 那次踩的坑(返回 index.html 还带 200, 肉眼完全看不出问题,
+# 只有前端拿 HTML 去 JSON.parse 时才炸)。
+#
+# ⚠ 必须打 https —— 打 http 拿到的是 80 端口那条 `return 301`, 301 会让
 # 断言"通过"却什么也没验证(第一版就是这么被骗过去的)。用 -k 加 Host 头直连
 # 本机 443, 绕过 DNS 与证书, 把变量收敛到"nginx 怎么路由"这一件事上。
-SPA=$(curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1/agent/api/companions \
-        -H 'Host: companion.luxera.top')
-if [ "$SPA" = "502" ] || [ "$SPA" = "401" ] || [ "$SPA" = "403" ]; then
-  echo "    ✓ /agent/api/** 已路由到 8091 (无 SPA 回退, 实得 $SPA)"
-elif [ "$SPA" = "200" ]; then
-  echo "    ✗ /agent/api/** 实得 200 —— 回退到 index.html 了, 检查 $NGINX_DST 里的 /agent/api/ location"
-else
-  echo "    ? /agent/api/** 实得 $SPA (既非回退也非预期错误码, 人工看一眼)"
-fi
+probe() {  # $1=路径 $2=期望说明
+  local ct code
+  ct=$(curl -sk -o /dev/null -w '%{content_type}' "https://127.0.0.1$1" -H 'Host: companion.luxera.top')
+  code=$(curl -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1$1" -H 'Host: companion.luxera.top')
+  case "$ct" in
+    text/html*) echo "    ✗ $1 → 落进 SPA 回退 (HTTP $code, $ct) —— 期望: $2" ;;
+    *)          echo "    ✓ $1 → 未回退 ($2; HTTP $code, ${ct:-无 Content-Type})" ;;
+  esac
+}
+# 伴侣域: 由 8081 服务端转给 8091 —— 不能落到静态页
+probe /api/companions          "路由到 8081(再由它转发 8091)"
+# G5 的回归点: 这条路径曾因"路径段=conversations"被判给 8081 而 404
+probe /api/companions/x/conversations/first "路由到 8081→8091(不是 8081 本地)"
+# 会话域: 8081 本地实现
+probe /api/auth/me             "路由到 8081 本地"
 
 echo "✅ 部署完成: https://companion.luxera.top"
+echo "   功能验收(需 JWT, 会真的建伴侣): bash scripts/check-frontend.sh"
+echo "   注意: 浏览器只跟本域名说话, 仿真 Agent 平台(8091)不在本域暴露任何路径。"
