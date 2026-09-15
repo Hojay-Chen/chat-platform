@@ -224,9 +224,31 @@ backend/
 
 > **目标**：聊天平台 + 应用平台一个仓库一个服务（由聊天平台启动类拉起），
 > 仿真 Agent 平台独立仓库独立进程；两套全新前端；仿真 Agent 的 OpenAPI 服务与聊天平台内的对接功能。
-> 分轮：**G1 仓 1 Gradle 化 ✅ → G2 仓 2 骨架+DH 迁移 ✅ → G3 跨服务 HTTP 化 → G4 OpenAPI 服务 → G5 聊天前端 → G6 Agent 管理前端 → G7 联调部署**。
+> 分轮：**G1 仓 1 Gradle 化 ✅ → G2 仓 2 骨架+DH 迁移 ✅ → G3 跨服务 HTTP 化 ✅ → G4 OpenAPI 服务 → G5 聊天前端 → G6 Agent 管理前端 → G7 联调部署**。
 
-### G2 已完成（2026-09-14）
+### G3 已完成（2026-09-15）—— 跨服务 HTTP 化
+
+四个跨服务 SPI 端口全部落 HTTP，两服务从此真正独立部署（chat:8081 ↔ agent-server:8091）：
+
+- **chat 侧**（本仓）：`AgentPlatformIntegration` 占位删除，`HttpCompanionDirectoryAdapter`
+  取代（requireOwned 404/不可达 → 诚实拒绝；onUserMessage → fire-and-forget 吞一切失败）；
+  新增 `/internal/**` 面：`InternalChatWorldController`（ChatWorldPort 19 方法）、
+  `InternalApplicationRuntimeController`（ActionGateway 全入口）、`InternalSimulatorAccessController`。
+- **鉴权**：服务间 HMAC-SHA256 签名（`X-Lap-Timestamp`/`X-Lap-Signature`，密钥
+  `AGENT_PLATFORM_INTERNAL_KEY` 两仓同值；未配 → /internal 503 死端点）。`InternalAuthFilter`
+  先验签再放行；Spring Security 的 `anyRequest().authenticated()` 放行 `/internal/**`
+  —— **这是 MCP/Developer API 那个坑的第三次踩点，`InternalEndpointSecurityTest` 钉死它**。
+- **契约修复**：`MessageView`/`ConversationView` 加 `@Jacksonized` —— 单进程时代这两个
+  Lombok 类型只序列化，G3 HTTP 面 first-time 反序列化时无 creator 直接炸。contract
+  artifact 重新 publishToMavenLocal。
+- **验收**：`scripts/check-split.sh` S1-S8 全绿 —— 双进程同起、/internal 面鉴权（无签名 401/
+  对签名 200）、同一 JWT 两服务认（**G2 只验过 401，JWT 认识链是 check-split 抓出的缺口，
+  JwtUtil/JwtAuthenticationFilter 补进仓 2 common**）、chat 发消息经 requireOwned 跨 HTTP、
+  fire-and-forget 认知通知真到对岸（processed_event 收据）、8091 缺席时 chat 照常（韧性）、
+  重起恢复。另抓出并修复：`processed_event.event_id` varchar(96) → 255（单进程时代
+  认知事件不落这张表，G3 拆分后 first-time 落库撞上确定性 eventId 143 字符）。
+
+
 
 `backend/digital-human-platform`（443 文件）整体迁往仓 2 `simulation-agent-platform`
 （含 Maven 遗物 `backend/pom.xml`、`backend/run.sh` 一并清除，本仓 backend/ 目录不复存在）：
@@ -269,7 +291,8 @@ build.gradle 依赖图 / contract 零仓内依赖）→ `gradle test` **466 全�
 3. **`CompanionDirectoryPort` 的启动缺口**：DH 搬走后 chat 主进程没有这个端口的实现
    —— 用 `@ConditionalOnMissingBean` 占位（`requireOwned` 诚实拒绝、`onUserMessage` 静默，
    与"进程外 DH 不在场"等价），G3 落 HTTP 适配器时自动退位。这正是 fire-and-forget
-   语义（V10 §2.1）的红利：Agent 平台缺席时聊天平台不残废。
+   语义（V10 §2.1）的红利：Agent 平台缺席时聊天平台不残废。**（G3 已兑现：占位删除，
+   `HttpCompanionDirectoryAdapter` 常驻；见 G3 段。）**
 
 ### 构建口径（G1 起）
 

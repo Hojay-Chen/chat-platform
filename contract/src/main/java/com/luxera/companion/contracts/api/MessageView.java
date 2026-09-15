@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.extern.jackson.Jacksonized;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -24,6 +25,7 @@ import java.util.Map;
  */
 @Getter
 @Builder
+@Jacksonized   // G3: /internal HTTP 面上本类型第一次需要反序列化(agent-server 读回), @Builder 单独不生成 creator
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class MessageView {
 

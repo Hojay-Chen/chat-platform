@@ -61,10 +61,15 @@ class McpEndpointSecurityTest {
      * G1 拆分后 chat 的 classpath 上不再有仿真 Agent 平台 —— {@code CompanionDirectoryPort}
      * 的实现住在另一个仓库。本测试要验的是过滤器链与 MCP 适配器本身, 数字人那侧给一个
      * 静默桩即可（onUserMessage 什么都不做, 与"进程外的 DH 此刻不在"等价）。
+     *
+     * <p>G3 起进程内占位被 {@code HttpCompanionDirectoryAdapter} 取代（@Component 常驻,
+     * 不再 @ConditionalOnMissingBean 退位）—— 测试上下文里真适配器与桩并存, 桩标
+     * {@code @Primary} 盖掉它: 单测不该真的去连 8091。
      */
     @TestConfiguration
     static class StubAgentPlatform {
         @Bean
+        @org.springframework.context.annotation.Primary
         CompanionDirectoryPort stubCompanionDirectory() {
             return new CompanionDirectoryPort() {
                 @Override

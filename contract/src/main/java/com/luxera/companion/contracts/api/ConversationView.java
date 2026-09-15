@@ -3,6 +3,7 @@ package com.luxera.companion.contracts.api;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.extern.jackson.Jacksonized;
 
 import java.time.LocalDateTime;
 
@@ -13,6 +14,7 @@ import java.time.LocalDateTime;
  */
 @Getter
 @Builder
+@Jacksonized   // G3: /internal HTTP 面上需要反序列化(同 MessageView)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ConversationView {
 

@@ -31,3 +31,10 @@ app:
     session-reaper-cron: 0 0 0 1 1 *
     lap-outbox-relay-cron: 0 0 0 1 1 *
     outbox-relay-cron: 0 0 0 1 1 *
+  # G3: /internal/** 服务间鉴权密钥(与仓 2 共享)。这里故意配一个测试值 ——
+  # InternalEndpointSecurityTest 依赖它验"过滤器放行 /internal/** + HMAC 鉴权生效"。
+  # 生产上必须由 AGENT_PLATFORM_INTERNAL_KEY 显式给, 密钥留空 = /internal 是 503 死端点。
+  agent-platform:
+    internal-service-key: test-internal-service-key
+    base-url: http://127.0.0.1:8091
+    timeout-ms: 2000

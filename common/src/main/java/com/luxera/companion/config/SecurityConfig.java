@@ -70,6 +70,12 @@ public class SecurityConfig {
                         .antMatchers(HttpMethod.POST, "/api/v1/developers").permitAll()
                         .antMatchers(HttpMethod.GET, "/api/v1/developers/*/applications").permitAll()
                         .antMatchers(HttpMethod.POST, "/api/v1/developers/*/applications").permitAll()
+                        // G3 §internal: /internal/** 的调用方是 agent-server 进程, 不是登录用户
+                        // —— JWT 这一层表达不了服务身份, 与上面 MCP/Developer API 同一个道理。
+                        // permitAll 不等于敞开: chat 模块的 InternalAuthFilter 在这一层之外
+                        // 先做 HMAC 签名校验(X-Lap-Timestamp + X-Lap-Signature, 共享
+                        // internal-service-key), 密钥没配的部署上 /internal 是 503 死端点。
+                        .antMatchers("/internal/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
