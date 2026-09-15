@@ -279,7 +279,7 @@ build.gradle 依赖图 / contract 零仓内依赖）→ `gradle test` **466 全�
 伴侣端到端段诚实跳过——它要验的链路从"一个进程内"变成"两服务之间"，G3 后由
 `check-split.sh` 承担）→ `check-lap.sh`（`LAP_AGENT_MODE=split`：断言 11/17/19/20 涉及
 数字人侧的诚实跳过，平台侧语义全部照验）→ `check-remote-app.sh` 全绿 →
-`check-ecosystem.sh` **E1–E7 全绿** → 前端 24 测试 + build 绿。
+`check-ecosystem.sh` **E1–E7 全绿** → 前端 **60 测试** + build 绿（G5 后含 `client.route.test.ts` 36 断言）。
 
 **拆分中暴露并修掉的三个结构事实**（都是"单进程时代隐形"的）：
 1. **测试桩与真实现的 Bean 冲突**：conversation 组测试的假应用目录（纸飞机 stub，
@@ -293,6 +293,33 @@ build.gradle 依赖图 / contract 零仓内依赖）→ `gradle test` **466 全�
    与"进程外 DH 不在场"等价），G3 落 HTTP 适配器时自动退位。这正是 fire-and-forget
    语义（V10 §2.1）的红利：Agent 平台缺席时聊天平台不残废。**（G3 已兑现：占位删除，
    `HttpCompanionDirectoryAdapter` 常驻；见 G3 段。）**
+
+### G5 已完成（2026-09-15）—— 聊天前端双服务适配
+
+前端（`frontend/`）在 G1 前就已是成熟的暖棕 IM 风（侧栏会话、气泡、已读回执、
+打字指示器、连发聚合、SSE 持久事件流、应用卡片、六个抽屉面板），**G5 的硬伤不是
+"从零建前端"，而是拆分后前端从没适配双服务**——G1 把伴侣域（companions CRUD /
+memories / relationship / life / self / reminders / notifications / user-model /
+state / reflections）迁去 8091，而会话/消息/事件流（conversations / messages /
+events / threads / applications）与 auth、应用平台（/api/v1）仍留在 8081。前端
+`client.ts` / vite 代理还单目标打 8081，记忆与关系的请求全部断在 404。
+
+**分流策略**——前端 URL 不变，`client.ts` 的 `route(url)` 在一处集中按"路径段"
+判定加 `/agent` 前缀（G7 生产 nginx 同一套规则）：
+- **8091（`/agent/api`）**：`/api/companions` 本身（列表/创建/compile/preview）、
+  `/{id}`（详情/删除）、`/{id}/{memories|relationship|life|self|reminders|
+  notifications|user-model|state|reflections|persona|life-events}`
+- **8081（`/api`，不加前缀）**：`/api/auth`、`/api/v1/**`、
+  `/{id}/{conversations|messages|events|threads|applications}` 及其子路径
+- `vite.config.ts` 双目标代理（顺序敏感：`/agent/api` 在 `/api` 前，`rewrite`
+  去 `/agent` 前缀转发 8091）
+- 死代码清理：`streamPost`（全库无引用）与 `emitBlock` 一并删除
+- `openEventStream` 的 fetch 也过 `route()`（`/events` 经判定归 8081，行为不变）
+
+**验收**：`client.route.test.ts` **36 断言**钉死归属判定（含 query/尾斜杠/段名
+冲突的边界用例）；`scripts/check-frontend.sh` F1–F5 端到端验分流（两服务同起 →
+登录 → /api/auth/me 经 vite 走 8081 → /agent/api/companions 走 8091 →
+反向验证 /api/companions 不加前缀在 8081 回 404）。前端 60 测试 + build 绿。
 
 ### 构建口径（G1 起）
 
