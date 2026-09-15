@@ -118,7 +118,7 @@ CODE8091=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8091/ 2>
 if [ "$CODE8091" != "000" ]; then
   echo "仿真 Agent 服务(8091) UP (探活实得 $CODE8091 —— 它没有 /api/health, 有响应即活着)"
 else
-  echo "⚠ 仿真 Agent 服务(8091) 未起 —— /agent/api/** 会 502(G5 分流的伴侣域全在这里)"
+  echo "⚠ 仿真 Agent 服务(8091) 未起 —— /api/companions/** 会 502(该域由 8081 转给 8091)"
   echo "   拉起: sudo systemctl start luxera-agent-server"
 fi
 
