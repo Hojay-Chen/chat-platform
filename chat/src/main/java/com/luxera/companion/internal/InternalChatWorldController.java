@@ -5,6 +5,7 @@ import com.luxera.companion.contracts.api.MessageAppendCommand;
 import com.luxera.companion.contracts.api.MessageView;
 import com.luxera.companion.contracts.spi.ChatWorldPort;
 import com.luxera.companion.conversation.ChatWorldAdapter;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -23,6 +24,14 @@ import java.util.Optional;
  *
  * <p>鉴权由 {@link InternalAuthFilter} 前置完成(HMAC 签名), 本类的所有端点都在
  * {@code /internal/**} 下。
+ *
+ * <p><b>时间参数必须显式标 {@code @DateTimeFormat(iso = DATE_TIME)}。</b>
+ * 仓 2 用 {@code ISO_LOCAL_DATE_TIME} 格式化后拼进 query string, 而
+ * {@code @RequestParam LocalDateTime} 不带该注解时走的是 Spring Boot 的**本地化**
+ * 默认格式器(非 ISO)—— 于是每一个带 {@code since}/{@code until} 的调用都在本类
+ * 抛 {@code DateTimeParseException} → 500。症状极隐蔽: 仓 2 只记一条"读世界失败"
+ * 的 WARN 然后降级, 数字人静默少掉一块用户历史上下文, 不报错、不缺页、只是变笨。
+ * 见 {@code InternalWorldTimeParamTest}(它钉的就是这个坑)。
  */
 @RestController
 @RequestMapping("/internal/world")
@@ -51,14 +60,14 @@ public class InternalChatWorldController {
 
     @GetMapping("/companions/{companionId}/user-messages")
     public List<MessageView> userMessagesSince(@PathVariable String companionId,
-                                              @RequestParam LocalDateTime since) {
+                                              @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime since) {
         return chatWorld.userMessagesSince(companionId, since);
     }
 
     @GetMapping("/companions/{companionId}/window")
     public List<MessageView> messagesBetween(@PathVariable String companionId,
-                                             @RequestParam LocalDateTime since,
-                                             @RequestParam LocalDateTime until) {
+                                             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime since,
+                                             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime until) {
         return chatWorld.messagesBetween(companionId, since, until);
     }
 
@@ -72,7 +81,7 @@ public class InternalChatWorldController {
     @GetMapping("/companions/{companionId}/count-by-kind")
     public Map<String, Long> countByKind(@PathVariable String companionId,
                                          @RequestParam String kind,
-                                         @RequestParam LocalDateTime since) {
+                                         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime since) {
         return Map.of("count", chatWorld.countByCompanionAndKindSince(companionId, kind, since));
     }
 
