@@ -4,7 +4,7 @@
 // 扫描聊天 + 应用两个平台 + common 的包, 打成一个可执行 fat jar:
 // 这就是"聊天平台与应用平台同进程, 由聊天平台启动"的物理形态。
 //
-// 对外端口不变: 8081 / companion.luxera.top —— nginx 与 systemd 无需感知这次拆分。
+// 对外端口不变: 8081 / chat.luxera.top —— nginx 与 systemd 无需感知这次拆分。
 
 plugins {
     id 'org.springframework.boot'

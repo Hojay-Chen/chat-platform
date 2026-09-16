@@ -7,8 +7,8 @@
 > 发布 `com.luxera:contract:1.0.0` 供其引入）。下文历史章节中的 `digital-human-platform`
 > 相关描述均为 V10/LAP 时代的记录，以本注记为准。
 >
-> **两个域名，各管各的（G8 起）**：`companion.luxera.top` → 本仓（前端静态 + `/api/**`
-> → 8081），`agent.luxera.top` → 仓 2（控制台静态 + `/api/v1/openapi/` 与 `/api/health`
+> **两个域名，各管各的（G8 起）**：`chat.luxera.top` → 本仓（前端静态 + `/api/**`
+> → 8081），`being.luxera.top` → 仓 2（控制台静态 + `/api/v1/openapi/` 与 `/api/health`
 > → 8092 + 其余 `/api/` → 8091）。**浏览器只跟聊天平台的后端说话** —— 聊天平台调仿真
 > Agent 平台是**后端调后端**：伴侣域请求由 8081 在服务端转给 8091，前端不做任何分流。
 > 详见 §G8。
@@ -346,26 +346,26 @@ G6/G7 全部落在**仓 2**（[simulation-agent-platform](../simulation-agent-pl
   后端 8092，分流不在"主机"而在**"面"**（管理钥 `X-Admin-Key` vs 客户端钥
   `Bearer sap_...`）—— `faceOf(url)` 判定该带哪把钥匙。计划里"状态走 8091"的
   那一项落地时被否掉了：8091 的 `StateController` 要用户 JWT，控制台没有。
-- **G7** nginx 新增 `agent.luxera.top`（`deploy/nginx/agent.luxera.top.conf` 在仓 2
-  版本库，`scripts/deploy.sh` 安装），与 `companion.conf` **并存互不干扰**：
-  - `agent.luxera.top` → 仓 2 控制台 `/var/www/agent` + `/api/` → 8092（**单上游**。
+- **G7** nginx 新增 `being.luxera.top`（`deploy/nginx/being.luxera.top.conf` 在仓 2
+  版本库，`scripts/deploy.sh` 安装），与 `chat.luxera.top.conf` **并存互不干扰**：
+  - `being.luxera.top` → 仓 2 控制台 `/var/www/agent` + `/api/` → 8092（**单上游**。
     **G8 已改为按前缀分两个上游**：`/api/v1/openapi/` 与 `/api/health` 仍归 8092，
     其余 `/api/` 归 8091 —— 平台自身功能面得在自己域名下可达）
-  - `companion.luxera.top` → 本仓前端 `/var/www/companion` + **双上游**：
+  - `chat.luxera.top` → 本仓前端 `/var/www/companion` + **双上游**：
     `/api/` → 8081，`/agent/api/` → 8091（去 `/agent` 前缀，与 G5 vite 的
     `path.replace(/^\/agent/, '')` 一一对应）。**这一条是 G7 补上的 G5 欠账** ——
     G5 只落了 dev 侧（vite rewrite），README 里那句"G7 生产 nginx 同一套前缀规则"
     在本轮之前没有落点：线上伴侣域请求会全部落到 `location /` 的 SPA 回退上，
-    dev 一切正常而线上静默 404。配置源头是本仓 `deploy/nginx/companion.conf`。
+    dev 一切正常而线上静默 404。配置源头是本仓 `deploy/nginx/chat.luxera.top.conf`。
     **G8 已把这条第二上游删除** —— 现在只有 `/api/` → 8081 一个上游，
     `/agent/api/` 不再存在。
   - 鉴权分层：控制台静态页套 Authelia 前门，`/api/**` **不套**（三方机器客户端
     拿 401 而不是 302 登录跳转）。这条差异是本轮部署最要紧的一处，详见仓 2 README §7 G7。
-    `companion.luxera.top` **未套** Authelia（现状保持，是否加套由用户定）。
+    `chat.luxera.top` **未套** Authelia（现状保持，是否加套由用户定）。
 - **G7 首次真机部署在本仓抓出四个缺陷**（都是"单看一个仓完全看不出来"的那类）：
   1. `scripts/deploy.sh` 的 `NGINX_SRC` 指向 `infrastructure/nginx/sites/` —— 那棵树
      停在 8 月（没有 `/agent/api` 落点），**每次跑 deploy.sh 都会把线上配置悄悄倒退回
-     拆分前**。已改为指向本仓 `deploy/nginx/companion.conf`，并加装前备份 + 校验失败回滚。
+     拆分前**。已改为指向本仓 `deploy/nginx/chat.luxera.top.conf`，并加装前备份 + 校验失败回滚。
   2. systemd 单元的 `WorkingDirectory` 指向 `chat-platform/backend`，而 `backend/` 在
      G1 物理拆分后已不存在 —— 后端自 G1 起就没起来过，按 `Restart=always` 每 5s
      无声重试。已改指仓库根。
@@ -389,13 +389,21 @@ G6/G7 全部落在**仓 2**（[simulation-agent-platform](../simulation-agent-pl
 
 **现在的分工**（`CompanionDomainProxyController`，新增）：
 
-- 浏览器只认 `companion.luxera.top` 一个域名，`/api/**` 全进 8081
+- 浏览器只认 `chat.luxera.top` 一个域名，`/api/**` 全进 8081
 - 伴侣域请求（8081 没实现的那些）由 8081 在**服务端**用 JDK `HttpURLConnection`
   流式转给 8091，响应原样回传（不缓冲响应头，否则 SSE 变成"等想完一次性吐出"）
 - **转发带的是调用方自己的 JWT，不是 HMAC 服务身份** —— 用服务身份会让 8081 变成
   绕过 8091 归属校验的 confused deputy
 - 判归属的依据是 **Spring 的 HandlerMapping 优先级**（"8081 到底实现了什么"），
   不是路径段：8081 自己实现的端点有更精确的映射，赢过 `/api/companions/**` 兜底
+
+**域名定名（用户拍板）**：`chat.luxera.top`（本仓）与 `being.luxera.top`（仓 2）。
+`being` 取"独立存在的人"—— 本 README 开篇那句"Chat Platform 是软件，Agent 是独立存在的人"。
+两个名字都被 `*.luxera.top` 泛域名证书覆盖，无需单独签证书。此前用过的
+`companion.luxera.top` / `agent.luxera.top` 已退役（nginx 里不再有 server 块，
+落到默认 server；`companion.luxera.top` 曾有一条公网 A 记录，可改指或删除）。
+**注意**：仓内 `伴侣域`/`伴侣` 这套词（如 `CompanionDomainProxyController`、Java 包名
+`com.luxera.companion.*`）是沿用下来的**功能术语**，与域名无关，本轮未动。
 
 **顺带查实 G5 的一个真实功能缺陷**：段规则把整个 `conversations` 段判给 8081，而
 `POST .../conversations/first` 与 `POST .../conversations/{cid}/chat` 都是 8091 的端点

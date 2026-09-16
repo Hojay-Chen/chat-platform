@@ -18,7 +18,7 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * G8 —— 伴侣域的服务端转发。聊天平台对外只有**一个域名**(companion.luxera.top → 8081),
+ * G8 —— 伴侣域的服务端转发。聊天平台对外只有**一个域名**(chat.luxera.top → 8081),
  * 浏览器永远只跟 8081 说话; 伴侣域(companions 详情 / memories / relationship / life /
  * self / reminders / notifications / user-model / state / reflections …)由 8081 在服务端
  * 转给仿真 Agent 平台(8091)。

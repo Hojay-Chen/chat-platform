@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 部署 companion.luxera.top (需 root)
+# 部署 chat.luxera.top (需 root)
 # G1 物理拆分: 可执行 jar 由 chat 项目组装(聊天+应用平台同进程; 仿真 Agent 平台在
 # simulation-agent-platform 仓库独立部署)。构建走 Gradle。
 set -euo pipefail
@@ -12,8 +12,8 @@ FRONTEND_DIST=/home/ubuntu/claude-workspace/chat-platform/frontend/dist
 # (见 workspace CLAUDE.md「infrastructure/ 目录过时」), 内容停在 8 月:
 # 它没有 G5 分流要的 /agent/api 落点, 于是每次跑 deploy.sh 都会把线上配置
 # 悄悄倒退回拆分前。源头必须在版本库跟随本仓演进。
-NGINX_SRC=/home/ubuntu/claude-workspace/chat-platform/deploy/nginx/companion.conf
-NGINX_DST=/etc/nginx/conf.d/companion.conf
+NGINX_SRC=/home/ubuntu/claude-workspace/chat-platform/deploy/nginx/chat.luxera.top.conf
+NGINX_DST=/etc/nginx/conf.d/chat.luxera.top.conf
 WEB_ROOT=/var/www/companion
 BACKUP_DIR=/var/backups/luxera-companion
 
@@ -58,8 +58,8 @@ if ! nginx -t; then
 fi
 
 echo "==> 4. /etc/hosts 本机解析 (幂等)"
-grep -q 'companion.luxera.top' /etc/hosts \
-  || echo '127.0.0.1 companion.luxera.top   # 伴侣平台' >> /etc/hosts
+grep -q 'chat.luxera.top' /etc/hosts \
+  || echo '127.0.0.1 chat.luxera.top   # 伴侣平台' >> /etc/hosts
 
 echo "==> 5. systemd 服务 luxera-companion-backend"
 cat > /etc/systemd/system/luxera-companion-backend.service <<EOF
@@ -143,8 +143,8 @@ done
 # 本机 443, 绕过 DNS 与证书, 把变量收敛到"nginx 怎么路由"这一件事上。
 probe() {  # $1=路径 $2=期望说明
   local ct code
-  ct=$(curl -sk -o /dev/null -w '%{content_type}' "https://127.0.0.1$1" -H 'Host: companion.luxera.top')
-  code=$(curl -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1$1" -H 'Host: companion.luxera.top')
+  ct=$(curl -sk -o /dev/null -w '%{content_type}' "https://127.0.0.1$1" -H 'Host: chat.luxera.top')
+  code=$(curl -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1$1" -H 'Host: chat.luxera.top')
   case "$ct" in
     text/html*) echo "    ✗ $1 → 落进 SPA 回退 (HTTP $code, $ct) —— 期望: $2" ;;
     *)          echo "    ✓ $1 → 未回退 ($2; HTTP $code, ${ct:-无 Content-Type})" ;;
@@ -157,6 +157,6 @@ probe /api/companions/x/conversations/first "路由到 8081→8091(不是 8081 �
 # 会话域: 8081 本地实现
 probe /api/auth/me             "路由到 8081 本地"
 
-echo "✅ 部署完成: https://companion.luxera.top"
+echo "✅ 部署完成: https://chat.luxera.top"
 echo "   功能验收(需 JWT, 会真的建伴侣): bash scripts/check-frontend.sh"
 echo "   注意: 浏览器只跟本域名说话, 仿真 Agent 平台(8091)不在本域暴露任何路径。"

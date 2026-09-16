@@ -3,7 +3,7 @@
 #
 # G1 拆分把伴侣域(companions CRUD / memories / relationship / …)迁到 8091,
 # 会话/消息/事件流留在 8081。G5 让**前端**按路径段分流(加 /agent 前缀直连 8091),
-# G8 改为**后端**转发: 浏览器只认 companion.luxera.top 一个域名, /api/** 全进 8081,
+# G8 改为**后端**转发: 浏览器只认 chat.luxera.top 一个域名, /api/** 全进 8081,
 # 伴侣域由 8081 转给 8091。本脚本验的就是这件事。
 #
 #   F1 环境: 两 jar + PG + 前端依赖装好
