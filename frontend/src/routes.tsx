@@ -1,16 +1,16 @@
 import type { ReactNode } from 'react'
-import { Navigate, type RouteObject } from 'react-router-dom'
+import { Navigate, useParams, type RouteObject } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth'
 import TabLayout from '@/layouts/TabLayout'
 import FullScreenLayout from '@/layouts/FullScreenLayout'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
-import Companions from '@/pages/Companions'
 import ChatList from '@/pages/chat/ChatList'
 import ChatRoom from '@/pages/chat/ChatRoom'
+import Contacts from '@/pages/contacts/Contacts'
+import AgentProfile from '@/pages/contacts/AgentProfile'
+import AgentSettings from '@/pages/contacts/AgentSettings'
 import CompanionCreate from '@/pages/CompanionCreate'
-import Chat from '@/pages/Chat'
-import Settings from '@/pages/Settings'
 import ApplicationMarket from '@/pages/ApplicationMarket'
 import ApplicationDetail from '@/pages/ApplicationDetail'
 import AppSession from '@/pages/AppSession'
@@ -32,6 +32,19 @@ function RequireAuth({ children }: { children: ReactNode }) {
 }
 
 /**
+ * 老路径的落点 —— 把 `:参数` 从当前 URL 搬到新路径上。
+ *
+ * 一次性写死四条 `<Navigate to="/contacts/agent/xxx">` 是不行的: 那一段是**运行时的
+ * companionId**, 不是字面量。而"从旧链接进来的人会被送到一个不存在的资料页"这件事,
+ * 恰恰只会在有人真的用旧链接时才暴露 —— 也就是那些收藏过页面的老用户。
+ */
+function RedirectKeepParams({ to }: { to: string }) {
+  const params = useParams()
+  const path = to.replace(/:([A-Za-z0-9_]+)/g, (_, key: string) => params[key] ?? '')
+  return <Navigate to={path} replace />
+}
+
+/**
  * 布局 A —— 四 tab。子路由就是 tab bar 上的四项, 一个不多一个不少:
  * tab bar 高亮的是"我在哪一栏", 而任何不在这一支下的页面都不该让某一栏亮起来。
  *
@@ -46,8 +59,7 @@ export const tabRoutes: RouteObject = {
   children: [
     { path: '/', element: <Navigate to="/chat" replace /> },
     { path: '/chat', element: <ChatList /> },
-    // 第 6 步换成 Contacts（同一份数据的另一种排法: 按人 vs 按最近消息）
-    { path: '/contacts', element: <Companions /> },
+    { path: '/contacts', element: <Contacts /> },
     { path: '/discover', element: <ApplicationMarket /> },
     { path: '/me', element: <Me /> },
   ],
@@ -62,6 +74,9 @@ export const tabRoutes: RouteObject = {
  * `/chat/:conversationId` 挂进来时要注意一条硬约定: **它下面不许有静态子路由**。
  * 一旦有人加 `/chat/new`, react-router 会把 `new` 当成会话 id 匹配进来。
  * "发起群聊"这类入口用弹层, 不要用路由。
+ *
+ * `/contacts/**` 那三条**没有**这条约束 —— `:companionId` 是真的一个人, 而
+ * `new` / `settings` 是被路由表静态匹配掉的, 走不到参数里去。
  */
 export const fullScreenRoutes: RouteObject = {
   element: (
@@ -73,6 +88,12 @@ export const fullScreenRoutes: RouteObject = {
     // 聊天室。**它下面不许有静态子路由** —— 一旦有人加 `/chat/new`,
     // react-router 会把 `new` 当成 conversationId 匹配进来。「发起群聊」用弹层, 不用路由。
     { path: '/chat/:conversationId', element: <ChatRoom /> },
+
+    // 通讯录的下一层: 加一个 Agent, 看一个 Agent, 改一个 Agent
+    { path: '/contacts/new', element: <CompanionCreate /> },
+    { path: '/contacts/agent/:companionId', element: <AgentProfile /> },
+    { path: '/contacts/agent/:companionId/settings', element: <AgentSettings /> },
+
     { path: '/applications/:applicationId', element: <ApplicationDetail /> },
     { path: '/applications/:applicationId/sessions/:sessionId', element: <AppSession /> },
     // 只有 sessionId 的那条路 —— 从分享链接兑票进来时走这里。
@@ -80,14 +101,6 @@ export const fullScreenRoutes: RouteObject = {
     { path: '/sessions/:sessionId', element: <AppSession /> },
     // 分享链接本身。这条路径是公开的(持票即入), 但仍然要求登录 —— 票认的是"谁"
     { path: '/join/:token', element: <JoinSession /> },
-
-    // ── 以下四条是老路径, 原样保留到各自的步骤再迁 ──────────────────
-    // 不在这里提前改挂新路径, 是因为 Chat / Settings 读的是 `:id`（一个 companionId）,
-    // 而新 IA 的 `/chat/:conversationId` 里那一段是会话 id —— 那是两回事,
-    // 提前套上去只会写出一句要不了多久就得撤掉的谎。它们在第 5、6 步随新页面一起换。
-    { path: '/companions/new', element: <CompanionCreate /> },
-    { path: '/companions/:id', element: <Chat /> },
-    { path: '/companions/:id/settings', element: <Settings /> },
   ],
 }
 
@@ -101,6 +114,19 @@ export const routes: RouteObject[] = [
   fullScreenRoutes,
 
   // ── 老路径的落点 ────────────────────────────────────────────────
+  // 新 IA 下"点一个伴侣"从通讯录进**资料页**, 不再是直接进聊天室 —— 所以这四条都
+  // 落到 `/contacts/**`。老页面(`Chat.tsx` / `Settings.tsx` / `Companions.tsx`)已随
+  // 第 6 步删除, 这里留下来的是给旧链接与人脑里的旧路径用的。
+  //
+  // `/companions/new` 必须排在 `/companions/:id` **前面**? 不必 —— react-router 按
+  // 段的静态程度排名, 静态段永远赢过参数段, 与书写顺序无关。仍然按这个顺序写, 因为
+  // 读的人会先看到它。
+  { path: '/companions/new', element: <Navigate to="/contacts/new" replace /> },
+  { path: '/companions/:id', element: <RedirectKeepParams to="/contacts/agent/:id" /> },
+  {
+    path: '/companions/:id/settings',
+    element: <RedirectKeepParams to="/contacts/agent/:id/settings" />,
+  },
   { path: '/companions', element: <Navigate to="/contacts" replace /> },
   // 「应用市场」这个名字保留, 但入口收进「发现」—— 与微信把小程序收进发现是同一种收法
   { path: '/applications', element: <Navigate to="/discover" replace /> },

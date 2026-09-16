@@ -83,7 +83,7 @@ export default function CompanionCreate() {
         relationshipType: relationshipType || undefined,
       })
       addCompanion(c)
-      navigate(`/companions/${c.id}`, { replace: true })
+      navigate(`/contacts/agent/${c.id}`, { replace: true })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -98,7 +98,7 @@ export default function CompanionCreate() {
     <div className="min-h-screen bg-cocoa-950">
       <header className="border-b border-cocoa-800">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-5 py-4">
-          <button onClick={() => navigate('/companions')} className="btn-ghost !px-3 !py-1.5">
+          <button onClick={() => navigate('/contacts')} className="btn-ghost !px-3 !py-1.5">
             <ArrowLeft size={15} />
           </button>
           <span className="font-editorial text-lg text-cocoa-50">创建新伴侣</span>

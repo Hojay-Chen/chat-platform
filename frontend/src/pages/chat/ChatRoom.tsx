@@ -100,7 +100,7 @@ export default function ChatRoom() {
         // 「正在输入」压过一切 —— 这是此刻唯一在变的事实
         subtitle={typing ? '正在输入…' : '仿真 Agent'}
         onBack={() => navigate('/chat')}
-        onMore={() => navigate(`/companions/${conv.peer.id}/settings`)}
+        onMore={() => navigate(`/contacts/agent/${conv.peer.id}`)}
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6">
@@ -244,7 +244,7 @@ function RoomHeader({
         <button
           type="button"
           onClick={onMore}
-          title="她是谁"
+          title="资料页"
           className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-ink-soft transition-colors hover:bg-sunken hover:text-ink"
         >
           <MoreHorizontal size={20} />
@@ -253,7 +253,3 @@ function RoomHeader({
     </header>
   )
 }
-
-// 第 6 步: 上面那个 `onMore` 的落点会从 `/companions/:id/settings` 翻成
-// `/contacts/agent/:id`, 那时 `Chat.tsx` 与 `/companions/:id` 一并删除。
-// 现在还不能指过去 —— 那条路要等资料页建好才存在, 而指向一个白屏比不指更糟。

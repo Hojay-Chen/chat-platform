@@ -123,11 +123,31 @@ describe('聊天侧的前端也不认识任何具体应用', () => {
   // 第 5 步新增: 这两个文件也在"画消息"的路径上, 而且 `ChatRoomPanel` 会列出
   // 「可以开一个」的清单。清单里那些名字从 `GET .../applications` 的响应来,
   // 一旦有人为了让某个应用好看起来在这里写死一个名字, 这条断言就会红。
+  /**
+   * 扫哪些文件。
+   *
+   * **这张表要跟着 IA 长大。** 它的作用是"聊天前端里不许出现任何具体应用的名字",
+   * 而这条约束只在被扫到的文件上生效 —— 新写了一屏消息界面却忘了加进来, 约束就静默
+   * 失效了, 而失效的表现是"什么也没发生", 没人会注意到。
+   *
+   * 所以第 6 步把通讯录与 Agent 资料页那一批全加了进来: 它们渲染 Agent 域的数据,
+   * 是"顺手写一句 `if (id === 'com.luxera.gomoku')`"最可能发生的地方。
+   */
   const FILES = [
     'src/components/ApplicationCardBubble.tsx',
     'src/api/chatApplications.ts',
+    'src/api/agent.ts',
     'src/pages/chat/ChatRoom.tsx',
     'src/pages/chat/ChatRoomPanel.tsx',
+    'src/pages/contacts/Contacts.tsx',
+    'src/pages/contacts/AgentProfile.tsx',
+    'src/pages/contacts/AgentSettings.tsx',
+    'src/pages/CompanionCreate.tsx',
+    'src/components/agent/PanelState.tsx',
+    'src/components/agent/RecentPanel.tsx',
+    'src/components/agent/MemoriesPanel.tsx',
+    'src/components/agent/UserModelPanel.tsx',
+    'src/components/agent/RelationshipPanel.tsx',
   ]
 
   const FORBIDDEN = [

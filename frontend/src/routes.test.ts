@@ -117,19 +117,55 @@ describe('路由表 · 全屏（布局 B）', () => {
   })
 })
 
+describe('路由表 · 通讯录的下一层', () => {
+  it('三条都在全屏那一支 —— 它们是从通讯录点进去的路径, 底部不该有 tab bar', () => {
+    const paths = childPaths(fullScreenRoutes)
+    for (const p of [
+      '/contacts/new',
+      '/contacts/agent/:companionId',
+      '/contacts/agent/:companionId/settings',
+    ]) {
+      expect(paths, `${p} 丢了`).toContain(p)
+    }
+  })
+
+  it('资料页与设置页都是 `:companionId`, 不是 `:id` —— 参数名变了要一起改', () => {
+    // 这一条不值钱地钉住一个命名: 路由段叫 `:companionId` 而组件里 `useParams` 取 `id`,
+    // 症状是 `companionId` 恒为 undefined —— 页面能打开, 但每个请求都打到
+    // `/api/companions/undefined/...`。类型系统看不见它, 因为 `useParams` 返回的是
+    // `Record<string, string | undefined>`。
+    const paths = childPaths(fullScreenRoutes)
+    expect(paths.filter((p) => p.startsWith('/contacts/') && p !== '/contacts/new')).toEqual([
+      '/contacts/agent/:companionId',
+      '/contacts/agent/:companionId/settings',
+    ])
+  })
+
+  it('设置页在资料页**下面** —— 它要靠资料页那个齿轮进去, 不是平级', () => {
+    const settings = childPaths(fullScreenRoutes).find((p) => p.endsWith('/settings'))!
+    expect(settings.startsWith('/contacts/agent/:companionId')).toBe(true)
+  })
+})
+
 describe('路由表 · 老路径的落点', () => {
   it.each([
     ['/companions', '/contacts'],
+    ['/companions/new', '/contacts/new'],
     ['/applications', '/discover'],
   ])('%s 重定向到 %s', (from, to) => {
     expect(redirectTarget(findTop(from)!)).toBe(to)
   })
 
-  it('/companions/:id 仍然可达 —— 老链接不能断, 第 6 步才换', () => {
-    // 第 5 步没有删它: 新建 Agent 的流程是「创建 → navigate(/companions/:id) → 老 Chat
-    // 调 conversations/first 建会话并触发问候语」。会话还只由那一条路创建出来,
-    // 删掉它, 刚建好的 Agent 会既不在消息列表里、也没有第一句问候。
-    // 第 6 步资料页建好之后, 那条路改成「创建 → 资料页 → 开始聊天」, 它才随 Chat.tsx 一起走。
-    expect(childPaths(fullScreenRoutes)).toContain('/companions/:id')
+  it.each([
+    ['/companions/:id', '/contacts/agent/:id'],
+    ['/companions/:id/settings', '/contacts/agent/:id/settings'],
+  ])('%s 带着参数重定向到 %s', (from, to) => {
+    // 第 5 步这一条还是**页面**(老 `Chat.tsx`), 因为新建 Agent 的流程要经它调
+    // `conversations/first` 建会话并触发问候语。第 6 步资料页把「发消息」这件事接过去
+    // 之后, 老页面连同 `Chat.tsx` / `Settings.tsx` 一起删除, 这里只剩一条重定向。
+    //
+    // 目标里必须**保留参数**: 写成 `/contacts/agent/` 是个能编译、能跑、把每个人都送到
+    // 同一个空白资料页的 bug。所以断言的是模板串本身, 而不是某个具体的人。
+    expect(redirectTarget(findTop(from)!)).toBe(to)
   })
 })
