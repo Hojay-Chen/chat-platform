@@ -14,13 +14,13 @@ import { useCompanionStore } from '@/stores/companion'
 import type { Notification } from '@/types'
 
 /**
- * 「我」→ 通知 —— 她主动找过你的那些时刻。
+ * 「我」→ 通知 —— Agent 主动找过你的那些时刻。
  *
  * <h2>进这一页就等于读完了</h2>
  *
  * 挂载时把所有未读标成已读。这不是偷懒, 而是这一页**唯一的语义**: 用户点进来看见了,
  * 那就读过了。反过来做(逐条点开才算读、或者给每条一个「标为已读」按钮)会把一个
- * 只读的流水页变成一个待办清单 —— 而它记的是"她做过什么", 不是"你欠她什么"。
+ * 只读的流水页变成一个待办清单 —— 而它记的是"Agent 做过什么", 不是"你欠它什么"。
  *
  * <h2>一期的取数: N 个并发请求 + 客户端合并</h2>
  *
@@ -96,7 +96,7 @@ export default function Notifications() {
         <div className="mx-auto w-full max-w-2xl">
           {loading && (
             <div className="px-5 py-5">
-              <PanelLoading label="正在看她找过你几次…" />
+              <PanelLoading label="正在看 Agent 找过你几次…" />
             </div>
           )}
 
@@ -118,7 +118,7 @@ export default function Notifications() {
             <EmptyState
               icon={<Bell size={26} />}
               title="还没有人会找你"
-              hint="添加一个 Agent 之后, 她会在想起你的时候主动出现。"
+              hint="添加一个 Agent 之后, 它会在想起你的时候主动出现。"
               action={
                 <button
                   type="button"
@@ -135,7 +135,7 @@ export default function Notifications() {
             <EmptyState
               icon={<Bell size={26} />}
               title="还没有通知"
-              hint="她主动找你的时候, 会在这里留下一条。"
+              hint="Agent 主动找你的时候, 会在这里留下一条。"
             />
           )}
 

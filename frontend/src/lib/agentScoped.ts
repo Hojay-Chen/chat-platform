@@ -6,7 +6,7 @@ import type { Notification, Reminder } from '@/types'
  * <h2>为什么需要它</h2>
  *
  * 提醒与通知在后端是**按 Agent** 存的: `GET /api/companions/{id}/reminders` ——
- * 因为提醒是"她对你说的话", 通知是"她发给你的事", 两者的主语都是某一个具体的人。
+ * 因为提醒是"某个 Agent 对你说的话", 通知是"某个 Agent 发给你的事", 两者的主语都是某一个具体的 Agent。
  *
  * 而用户在「我」这一栏问的是"我有什么事", 主语是他自己。于是这一层合并是必须的。
  *
@@ -78,7 +78,7 @@ export function isDone(reminder: Reminder): boolean {
 /**
  * 通知: 最新发生的在前。
  *
- * 未读的**不**单独提到最上面: 通知是"她做过什么"的流水, 打乱时间顺序去看它,
+ * 未读的**不**单独提到最上面: 通知是"Agent 做过什么"的流水, 打乱时间顺序去看它,
  * 会让人读不懂那几天发生了什么。未读该用视觉标出来(小圆点), 不是靠重排。
  */
 export function sortNotifications(

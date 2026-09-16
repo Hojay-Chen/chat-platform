@@ -11,7 +11,7 @@ import { PanelError, PanelLoading } from './PanelState'
  *
  * 这是资料页上唯一一屏**直接展示数值**的地方 —— 「最近」那一栏刻意不展示。理由:
  * 用户在「关系」里问的是"我们现在到哪一步了", 那个问题本身就需要刻度; 而在「最近」里
- * 他问的是"她今天怎么样", 给他 0.62 是答非所问。
+ * 他问的是"{name}今天怎么样", 给他 0.62 是答非所问。
  *
  * 即便如此, 七个刻度也不是裸的: 每一条都说得出中文名, 「联系压力」超过 0.4 时旁边
  * 会多一句人话(「有一阵没好好聊了」)—— 数值回答"多少", 那句话回答"所以呢"。
@@ -35,7 +35,11 @@ const METERS: { key: string; label: string }[] = [
   { key: 'connectionPressure', label: '联系压力' },
 ]
 
-export function RelationshipPanel({ companionId }: { companionId: string }) {
+export function RelationshipPanel({ companionId, agentName }: {
+  companionId: string
+  /** 必填 —— 见 UserModelPanel 文件头: 指代一律用名字, 不用代词 */
+  agentName: string
+}) {
   const { data, loading, error } = useAgentData(companionId, agentApi.getRelationship, EMPTY)
 
   if (loading) return <PanelLoading label="正在看你们的关系…" />
@@ -73,14 +77,14 @@ export function RelationshipPanel({ companionId }: { companionId: string }) {
 
           {/* 数值给"多少", 这句话给"所以呢" —— 两者都有才叫看得懂 */}
           {(rel.connectionPressure ?? 0) > 0.4 && (
-            <p className="mt-2 text-xs text-accent">有一阵没好好聊了, 她心里惦记着。</p>
+            <p className="mt-2 text-xs text-accent">{agentName}心里惦记着 —— 有一阵没好好聊了。</p>
           )}
         </div>
       )}
 
       {data.state && (
         <div className="rounded-xl border border-line bg-raised p-4">
-          <h4 className="text-sm font-medium text-ink">她此刻</h4>
+          <h4 className="text-sm font-medium text-ink">{agentName}此刻</h4>
           <div className="mt-2 grid grid-cols-2 gap-1.5 text-xs text-ink-soft">
             <span>心情:{data.state.mood || '平静'}</span>
             <span className="tnum">精力:{pct(data.state.energy)}</span>
@@ -124,7 +128,7 @@ export function RelationshipPanel({ companionId }: { companionId: string }) {
       )}
 
       {!rel && data.sharedExperiences.length === 0 && data.events.length === 0 && (
-        <p className="py-8 text-center text-sm text-ink-faint">还没有关系记录, 去和她聊聊吧。</p>
+        <p className="py-8 text-center text-sm text-ink-faint">还没有关系记录, 去和{agentName}聊聊吧。</p>
       )}
     </div>
   )

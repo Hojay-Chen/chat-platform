@@ -22,7 +22,7 @@ describe('agentLabels', () => {
     expect(memoryTypeZh('semantic')).toBe('认知')
     expect(memoryTypeZh('shared')).toBe('共同')
     expect(reminderTypeZh('user_set')).toBe('自定义')
-    expect(notificationTypeZh('proactive')).toBe('她主动')
+    expect(notificationTypeZh('proactive')).toBe('主动找你')
     expect(traitZh('warmth')).toBe('温柔')
     expect(changeSourceZh('evolution')).toBe('自动演化')
   })

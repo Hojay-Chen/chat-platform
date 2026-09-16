@@ -48,7 +48,7 @@ async function load(companions: { id: string; name: string }[]): Promise<Reminde
   results.forEach((r, i) => {
     if (r.status === 'fulfilled') groups.push(r.value)
     // 一个 Agent 拉不到不代表别的也拉不到 —— 用 allSettled 而不是 all,
-    // 否则最坏的情况下"她有 3 条提醒"会因为你另一个 Agent 的接口 500 而全部看不见
+    // 否则最坏的情况下"某个 Agent 有 3 条提醒"会因为你另一个 Agent 的接口 500 而全部看不见
     else failures.push(companions[i].name)
   })
   return { groups, failures }
@@ -218,7 +218,7 @@ function ReminderRow({ row, onDone }: { row: AgentScoped<Reminder>; onDone?: () 
  * 新建提醒要选「让谁提醒我」—— 因为提醒是按 Agent 存的, 没有"系统提醒"这种东西。
  *
  * 这一期只有列表里的第一个 Agent 会被默认选中, 用户可改。二期提醒改成用户维度之后,
- * 这个选择器会变成"要不要告诉她", 而不是"存到谁名下"—— 但在那之前, 藏起这个选择
+ * 这个选择器会变成"要不要让 Agent 知道", 而不是"存到谁名下"—— 但在那之前, 藏起这个选择
  * 会让"谁提醒我"变成一个用户看不见的暗决定。
  */
 function CreateReminder({
@@ -291,7 +291,7 @@ function CreateReminder({
           onClick={() => void submit()}
           disabled={busy || !agentId || !title.trim() || !time}
         >
-          {busy ? '正在记下…' : '让她记着'}
+          {busy ? '正在记下…' : '记下来'}
         </button>
         <button type="button" className="btn-ghost" onClick={onCancel}>
           取消

@@ -81,7 +81,7 @@ export function reminderTypeZh(type: string): string {
 }
 
 export const NOTIFICATION_TYPE_ZH: Record<string, string> = {
-  proactive: '她主动',
+  proactive: '主动找你',
   birthday: '生日',
   reminder: '提醒',
   relationship: '关系',

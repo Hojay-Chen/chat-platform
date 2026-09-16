@@ -154,7 +154,16 @@ export default function AppSession() {
   const iAmOwner = me?.role === 'OWNER'
 
   return (
-    <div className="min-h-screen bg-surface">
+/*
+ * `h-full overflow-y-auto` 而不是 `min-h-screen` —— 这一页是 FullScreenLayout 的
+ * 子路由, 而那个布局是 `h-dvh overflow-hidden`(它把纵向空间交给页面自己管)。
+ * 页面用 `min-h-screen` 又不给自己一个滚动容器, 后果是**超出首屏的内容被裁掉且
+ * 滚不到** —— 而这一页的内容恰恰是"编译出人格之后才长出来"的, 首屏一定装不下。
+ *
+ * 滚动容器放在根节点上, 上面那个 `sticky top-0` 的头部才有东西可吸; 之前
+ * `overflow-hidden` 的父级让 sticky 无处可吸, 头部实际是死的。
+ */
+    <div className="h-full overflow-y-auto bg-surface">
       <header className="sticky top-0 z-10 border-b border-line bg-surface/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-5 py-4">
           <Link

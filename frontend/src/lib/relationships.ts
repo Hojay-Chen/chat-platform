@@ -9,7 +9,7 @@ export const RELATIONSHIP_TYPES = [
   { value: 'classmate', label: '同学', desc: '一起学习和成长的伙伴' },
   { value: 'family', label: '家人', desc: '血缘般的羁绊' },
   { value: 'mentor', label: '前辈/老师', desc: '值得尊敬和学习的对象' },
-  { value: 'other', label: '自定义', desc: '由你和她共同定义' },
+  { value: 'other', label: '自定义', desc: '由你和它共同定义' },
 ] as const
 
 export type RelationshipTypeValue = (typeof RELATIONSHIP_TYPES)[number]['value']

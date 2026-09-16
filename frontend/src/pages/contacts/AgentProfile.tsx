@@ -19,7 +19,7 @@ import type { Companion } from '@/types'
  *
  * <h2>为什么是资料页, 不是聊天室里的抽屉</h2>
  *
- * 「记忆 / 她了解的 / 关系 / 最近」这四样都是**关于她的**, 不是**关于这段对话的**。
+ * 「记忆 / 它了解的 / 关系 / 最近」这四样都是**关于它的**, 不是**关于这段对话的**。
  * 它们不随会话变, 也不该在聊天时占掉半屏 —— 聊天室里那个位置属于小程序面板。
  * 微信把"这个人是谁"放在联系人资料页, 这里照做。
  *
@@ -31,7 +31,7 @@ import type { Companion } from '@/types'
  * <h2>「发消息」为什么不是一句 `navigate`</h2>
  *
  * 因为**刚创建的 Agent 一段会话都没有**。聊天室按 conversationId 寻址, 而没有会话时
- * 那个 id 不存在。所以这里要先看会话列表里有没有她, 没有再开一段 —— 这正是老实现里
+ * 那个 id 不存在。所以这里要先看会话列表里有没有它, 没有再开一段 —— 这正是老实现里
  * `conversations/first` 那条路径, 也是 `Chat.tsx` 一度不能删的唯一原因。它现在归位到了
  * 这里, 而这一段逻辑本来就该属于"点一个人, 跟他说话"这个动作。
  */
@@ -40,7 +40,7 @@ type TabKey = 'recent' | 'memories' | 'model' | 'relationship'
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'recent', label: '最近' },
   { key: 'memories', label: '记忆' },
-  { key: 'model', label: '她了解的' },
+  { key: 'model', label: '它了解的' },
   { key: 'relationship', label: '关系' },
 ]
 
@@ -172,7 +172,7 @@ export default function AgentProfile() {
 
             {/*
               四个 tab 是**互斥的四个视图**, 不是四段折叠起来的内容 —— 所以这里用
-              tab 而不是 accordion: 用户在这一屏问的是"她是谁", 一次看一面就够。
+              tab 而不是 accordion: 用户在这一屏问的是"它是谁", 一次看一面就够。
             */}
             <div className="mt-5 flex gap-1 border-b border-line px-3">
               {TABS.map((t) => (
@@ -191,11 +191,20 @@ export default function AgentProfile() {
               ))}
             </div>
 
+            {/*
+              四个面板都要 `agentName`: 它们原来通篇用「她」—— 那是"数字伴侣"时代
+              的遗留(那个产品里 agent 恒为女性)。现在 agent 按用户需求生成, gender
+              可以是 male, 于是「她今天在干嘛」就成了界面在说假话。这一屏里 agent
+              一定已经加载出来了(上面那个 `{agent && ...}` 就是闸门), 所以把名字
+              传下去是零成本的。
+            */}
             <div className="px-5 py-5">
-              {tab === 'recent' && <RecentPanel companionId={companionId} />}
-              {tab === 'memories' && <MemoriesPanel companionId={companionId} />}
-              {tab === 'model' && <UserModelPanel companionId={companionId} />}
-              {tab === 'relationship' && <RelationshipPanel companionId={companionId} />}
+              {tab === 'recent' && <RecentPanel companionId={companionId} agentName={agent.name} />}
+              {tab === 'memories' && <MemoriesPanel companionId={companionId} agentName={agent.name} />}
+              {tab === 'model' && <UserModelPanel companionId={companionId} agentName={agent.name} />}
+              {tab === 'relationship' && (
+                <RelationshipPanel companionId={companionId} agentName={agent.name} />
+              )}
             </div>
           </div>
         )}

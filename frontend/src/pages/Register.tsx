@@ -25,7 +25,7 @@ export default function Register() {
   }
 
   return (
-    <AuthShell title="认识一下" subtitle="给自己起个名字,然后去遇见她">
+    <AuthShell title="认识一下" subtitle="给自己起个名字,然后去遇见它">
       <form onSubmit={submit} className="space-y-4">
         <div>
           <label className="label">用户名</label>

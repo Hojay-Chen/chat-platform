@@ -63,7 +63,7 @@ function startOfDay(d: Date): Date {
   return c
 }
 
-/** 她最近 / 通知列表里的相对时刻: 刚刚 / 12 分钟前 / 3 小时前 / 5 天前 / 2026年8月1日 */
+/** 「最近」/ 通知列表里的相对时刻: 刚刚 / 12 分钟前 / 3 小时前 / 5 天前 / 2026年8月1日 */
 export function timeAgo(iso: string, now: Date = new Date()): string {
   const diffMs = now.getTime() - new Date(iso).getTime()
   const mins = Math.floor(diffMs / 60000)

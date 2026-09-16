@@ -151,7 +151,7 @@ export function useChatRoom(conversationId: string | undefined) {
             })
           }
         } else if (event === 'companion_message') {
-          // 她发来的 → 增量追加, 不重载整个聊天记录(§十四)
+          // 对方发来的 → 增量追加, 不重载整个聊天记录(§十四)
           const content = String(d.content ?? '')
           const proactive = d.proactive === true
           if (mid) {

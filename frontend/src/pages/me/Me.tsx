@@ -55,14 +55,14 @@ export default function Me() {
       <div className="mx-3 divide-y divide-line overflow-hidden rounded-xl border border-line bg-raised">
         <ListRow
           title="提醒"
-          subtitle="让她到点提醒你"
+          subtitle="到点提醒你的事"
           leading={<IconTile><AlarmClock size={16} /></IconTile>}
           trailing={<ChevronRight size={16} className="text-ink-faint" />}
           onClick={() => navigate('/me/reminders')}
         />
         <ListRow
           title="通知"
-          subtitle="她主动找过你的那些时刻"
+          subtitle="有 Agent 主动找过你的时刻"
           leading={<IconTile><Bell size={16} /></IconTile>}
           trailing={<ChevronRight size={16} className="text-ink-faint" />}
           onClick={() => navigate('/me/notifications')}

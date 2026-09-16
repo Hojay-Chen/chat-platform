@@ -15,7 +15,7 @@ import { PanelError, PanelLoading } from './PanelState'
  * 资料页的「最近」。
  *
  * 用户视角, 不暴露数值面板 —— 这一条是老 `Chat.tsx` 里那段注释的原话, 它是对的:
- * 一屏「熟悉度 0.62 / 信任 0.48」是开发者看的东西, 而"她今天在干嘛"才是人看的。
+ * 一屏「熟悉度 0.62 / 信任 0.48」是开发者看的东西, 而"{name}今天在干嘛"才是人看的。
  * 数值留在「关系」那一栏, 且换个说法(见 `RelationshipPanel`)。
  *
  * <h2>一个面板里的 5 个请求, 一起发</h2>
@@ -49,10 +49,14 @@ async function load(companionId: string): Promise<RecentBundle> {
   return { life, self, narrative, threads, loops }
 }
 
-export function RecentPanel({ companionId }: { companionId: string }) {
+export function RecentPanel({ companionId, agentName }: {
+  companionId: string
+  /** 必填 —— 见 UserModelPanel 文件头: 指代一律用名字, 不用代词 */
+  agentName: string
+}) {
   const { data, loading, error } = useAgentData(companionId, load, EMPTY)
 
-  if (loading) return <PanelLoading label="正在看她今天过得怎么样…" />
+  if (loading) return <PanelLoading label={`正在看${agentName}今天过得怎么样…`} />
   if (error) return <PanelError message={error} />
 
   const { life, self, narrative, threads, loops } = data
@@ -61,7 +65,7 @@ export function RecentPanel({ companionId }: { companionId: string }) {
   return (
     <div className="space-y-5">
       <section>
-        <h4 className="text-sm font-medium text-ink">她今天在干嘛</h4>
+        <h4 className="text-sm font-medium text-ink">{agentName}今天在干嘛</h4>
         {life?.todaySummary && (
           <p className="mt-1 text-xs leading-relaxed text-ink-soft">{life.todaySummary}</p>
         )}
@@ -81,14 +85,14 @@ export function RecentPanel({ companionId }: { companionId: string }) {
             </div>
           ))}
           {activities.length === 0 && (
-            <p className="text-xs text-ink-faint">她今天还没有安排。</p>
+            <p className="text-xs text-ink-faint">{agentName}今天还没有安排。</p>
           )}
         </div>
       </section>
 
       {self?.narrative && (
         <section>
-          <h4 className="text-sm font-medium text-ink">她最近觉得自己</h4>
+          <h4 className="text-sm font-medium text-ink">{agentName}最近觉得自己</h4>
           <p className="mt-1.5 rounded-xl bg-sunken p-3 text-sm leading-relaxed text-ink-soft">
             {self.narrative}
           </p>
@@ -128,7 +132,7 @@ export function RecentPanel({ companionId }: { companionId: string }) {
 
       {loops.length > 0 && (
         <section>
-          <h4 className="text-sm font-medium text-ink">她记着这些没办完的事</h4>
+          <h4 className="text-sm font-medium text-ink">{agentName}记着这些没办完的事</h4>
           <div className="mt-1.5 space-y-1.5">
             {loops.map((l) => (
               <div key={l.id} className="rounded-lg bg-sunken px-3 py-2 text-xs text-ink-soft">

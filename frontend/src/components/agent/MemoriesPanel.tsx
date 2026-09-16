@@ -18,7 +18,7 @@ import { PanelError, PanelLoading } from './PanelState'
  *
  * <h2>清空全部要二次确认, 「忘记」一条不用</h2>
  *
- * 单条删除是可逆的(再聊一次她就想起来了), 而且用户看得见自己删的是哪一条;
+ * 单条删除是可逆的(再聊一次它就想起来了), 而且用户看得见自己删的是哪一条;
  * 清空全部是不可逆的、看不见边界的。所以只有后者弹 confirm。
  *
  * <h2>搜索结果是一层覆盖, 不是一份新数据</h2>
@@ -44,7 +44,11 @@ async function load(companionId: string): Promise<MemoriesBundle> {
   return { memories, entities }
 }
 
-export function MemoriesPanel({ companionId }: { companionId: string }) {
+export function MemoriesPanel({ companionId, agentName }: {
+  companionId: string
+  /** 必填 —— 见 UserModelPanel 文件头: 指代一律用名字, 不用代词 */
+  agentName: string
+}) {
   const { data, loading, error, reload } = useAgentData(companionId, load, EMPTY)
 
   const [hits, setHits] = useState<Memory[] | null>(null)
@@ -54,7 +58,7 @@ export function MemoriesPanel({ companionId }: { companionId: string }) {
   const [graph, setGraph] = useState<{ nodes: Memory[]; links: MemoryLink[] } | null>(null)
   const [linkCount, setLinkCount] = useState<number | null>(null)
 
-  if (loading) return <PanelLoading label="正在翻她的记忆…" />
+  if (loading) return <PanelLoading label={`正在翻${agentName}的记忆…`} />
   if (error) return <PanelError message={error} />
 
   const memories = hits ?? data.memories
@@ -89,7 +93,7 @@ export function MemoriesPanel({ companionId }: { companionId: string }) {
 
   async function clearAll() {
     // 见文件头: 这一条不可逆、看不见边界, 所以只有它确认
-    if (!confirm('确定让她忘记所有这些记忆吗?这是不可逆的。')) return
+    if (!confirm(`确定让${agentName}忘记所有这些记忆吗?这是不可逆的。`)) return
     await agentApi.clearMemories(companionId)
     refresh()
   }
@@ -143,12 +147,12 @@ export function MemoriesPanel({ companionId }: { companionId: string }) {
         </button>
       </div>
       <p className="text-xs text-ink-faint">
-        她记得这些, 并在聊天时自然地使用它们。点「为什么」可看来源对话。
+        {agentName}记得这些, 并在聊天时自然地使用它们。点「为什么」可看来源对话。
       </p>
 
       {data.entities.length > 0 && (
         <div className="rounded-xl border border-line bg-raised p-3">
-          <p className="text-xs text-ink-faint">她认识的(你常提的人 / 地方 / 事):</p>
+          <p className="text-xs text-ink-faint">{agentName}认识的(你常提的人 / 地方 / 事):</p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {data.entities.map((e) => (
               <span
@@ -205,7 +209,7 @@ export function MemoriesPanel({ companionId }: { companionId: string }) {
 
       {memories.length === 0 && (
         <p className="py-8 text-center text-sm text-ink-faint">
-          {hits ? '没有找到相关的记忆。' : '还没有记忆, 去和她聊聊吧。'}
+          {hits ? '没有找到相关的记忆。' : `还没有记忆, 去和${agentName}聊聊吧。`}
         </p>
       )}
 
@@ -244,7 +248,7 @@ export function MemoriesPanel({ companionId }: { companionId: string }) {
               {sourceOf[m.id].map((s, i) => (
                 <p key={i} className="text-xs text-ink-soft">
                   <span className={s.sender === 'user' ? 'text-accent' : 'text-ink-faint'}>
-                    {s.sender === 'user' ? '你' : '她'}:
+                    {s.sender === 'user' ? '你' : agentName}:
                   </span>{' '}
                   {s.content}
                 </p>

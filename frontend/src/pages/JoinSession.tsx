@@ -53,7 +53,16 @@ export default function JoinSession() {
   }, [token, navigate, report])
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface px-5">
+/*
+ * `h-full overflow-y-auto` 而不是 `min-h-screen` —— 这一页是 FullScreenLayout 的
+ * 子路由, 而那个布局是 `h-dvh overflow-hidden`(它把纵向空间交给页面自己管)。
+ * 页面用 `min-h-screen` 又不给自己一个滚动容器, 后果是**超出首屏的内容被裁掉且
+ * 滚不到** —— 而这一页的内容恰恰是"编译出人格之后才长出来"的, 首屏一定装不下。
+ *
+ * 滚动容器放在根节点上, 上面那个 `sticky top-0` 的头部才有东西可吸; 之前
+ * `overflow-hidden` 的父级让 sticky 无处可吸, 头部实际是死的。
+ */
+    <div className="flex h-full items-center justify-center overflow-y-auto bg-surface px-5">
       <div className="card w-full max-w-md text-center">
         <Ticket className="mx-auto text-accent" size={28} />
         <h1 className="mt-3 text-xl text-ink">加入这一场</h1>

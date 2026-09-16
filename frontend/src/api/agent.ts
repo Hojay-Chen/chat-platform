@@ -139,7 +139,7 @@ export function exportMemories(companionId: string): Promise<unknown> {
   return api.get(`${base(companionId)}/memories/export`)
 }
 
-// ── 用户模型(「她了解的」) ───────────────────────────────────────────
+// ── 用户模型(「它了解的」) ───────────────────────────────────────────
 
 export function listUserFacts(companionId: string): Promise<UserFact[]> {
   return api.get<UserFact[]>(`${base(companionId)}/user-model/facts`)

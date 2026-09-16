@@ -91,17 +91,26 @@ export default function CompanionCreate() {
     }
   }
 
-  const name = persona?.identity?.name || '她'
+  const name = persona?.identity?.name || '新 Agent'
   const traits = persona?.personality?.traits || {}
 
   return (
-    <div className="min-h-screen bg-surface">
+/*
+ * `h-full overflow-y-auto` 而不是 `min-h-screen` —— 这一页是 FullScreenLayout 的
+ * 子路由, 而那个布局是 `h-dvh overflow-hidden`(它把纵向空间交给页面自己管)。
+ * 页面用 `min-h-screen` 又不给自己一个滚动容器, 后果是**超出首屏的内容被裁掉且
+ * 滚不到** —— 而这一页的内容恰恰是"编译出人格之后才长出来"的, 首屏一定装不下。
+ *
+ * 滚动容器放在根节点上, 上面那个 `sticky top-0` 的头部才有东西可吸; 之前
+ * `overflow-hidden` 的父级让 sticky 无处可吸, 头部实际是死的。
+ */
+    <div className="h-full overflow-y-auto bg-surface">
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-5 py-4">
           <button onClick={() => navigate('/contacts')} className="btn-ghost !px-3 !py-1.5">
             <ArrowLeft size={15} />
           </button>
-          <span className="text-lg text-ink">创建新伴侣</span>
+          <span className="text-lg text-ink">添加 Agent</span>
         </div>
       </header>
 
@@ -111,13 +120,13 @@ export default function CompanionCreate() {
         {/* Step 1: 描述 */}
         <section className="card p-6">
           <div className="mb-1 text-xs uppercase tracking-widest text-accent">STEP 1</div>
-          <h2 className="text-2xl text-ink">用你的话描述她</h2>
+          <h2 className="text-2xl text-ink">用你的话描述它</h2>
           <p className="mt-1 text-sm text-ink-soft">
-            性格、说话方式、你们的关系、她想要怎样的相处。想到什么说什么,她会从你的描述里诞生。
+            性格、说话方式、你们的关系、它想要怎样的相处。想到什么说什么,它会从你的描述里诞生。
           </p>
           <textarea
             className="input mt-4 min-h-32 resize-none"
-            placeholder="例如:我想要一个比我成熟一点的女生,温柔但不黏人,有自己的生活,平时活泼一点,偶尔会调侃我。我不开心的时候希望她先陪我,不要一直讲大道理。"
+            placeholder="例如:我想要一个比我成熟一点的伙伴,温柔但不黏人,有自己的生活,平时活泼一点,偶尔会调侃我。我不开心的时候希望它先陪我,不要一直讲大道理。"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
@@ -127,13 +136,13 @@ export default function CompanionCreate() {
           </button>
         </section>
 
-        {/* Step 1.5: 你和她是什么关系 (§七: 真实关系状态, 不是 Prompt) */}
+        {/* Step 1.5: 你和它是什么关系 (§七: 真实关系状态, 不是 Prompt) */}
         {persona && (
           <section className="card mt-6 p-6 animate-fadeUp">
             <div className="mb-1 text-xs uppercase tracking-widest text-accent">你们的关系</div>
-            <h2 className="text-xl text-ink">你和她是什么关系?</h2>
+            <h2 className="text-xl text-ink">你和它是什么关系?</h2>
             <p className="mt-1 text-sm text-ink-soft">
-              这会成为她世界里真实的关系状态:她对你的熟悉、信任、亲昵都会从它开始。
+              这会成为它世界里真实的关系状态:它对你的熟悉、信任、亲昵都会从它开始。
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {RELATIONSHIP_TYPES.map((t) => (
@@ -242,7 +251,7 @@ export default function CompanionCreate() {
                 重新描述
               </button>
               <button className="btn-primary" onClick={create} disabled={creating}>
-                {creating ? '正在遇见…' : '就她了,开始相处'}
+                {creating ? '正在唤醒…' : '就它了,开始相处'}
               </button>
             </div>
           </section>

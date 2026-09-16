@@ -14,16 +14,16 @@ import { format } from 'date-fns'
  *
  * <h2>它和资料页的分工</h2>
  *
- * 资料页回答「她是谁」, 设置页回答「我要改变她什么」。前者是读, 后者是写, 而且写的
+ * 资料页回答「它是谁」, 设置页回答「我要改变它什么」。前者是读, 后者是写, 而且写的
  * 那几个动作里有两个**不可逆**(清空记忆、删除)。所以分成两页, 而不是在资料页底部加
- * 一栏按钮: 一个能一键删掉她的按钮, 不该和"看看她的记忆"挨在一起。
+ * 一栏按钮: 一个能一键删掉它的按钮, 不该和"看看它的记忆"挨在一起。
  *
  * <h2>不可逆动作的三个层次</h2>
  *
  * - 「更新人格」—— 不确认。它保留旧版本(人格版本历史就在下面), 本来就是可逆的
- * - 「清空记忆 / 清空她对你的了解」—— confirm 一次。不可逆, 但对象是数据不是人
- * - 「删除她」—— confirm 一次 + 单独一栏放在最底下 + 红色。这一栏在视觉上必须与
- *   上面所有东西分开, 因为它是这一屏唯一一个"点完之后她就不存在了"的按钮
+ * - 「清空记忆 / 清空它对你的了解」—— confirm 一次。不可逆, 但对象是数据不是人
+ * - 「删除它」—— confirm 一次 + 单独一栏放在最底下 + 红色。这一栏在视觉上必须与
+ *   上面所有东西分开, 因为它是这一屏唯一一个"点完之后它就不存在了"的按钮
  */
 interface SettingsBundle {
   agent: Awaited<ReturnType<typeof agentApi.getAgent>>
@@ -102,7 +102,7 @@ export default function AgentSettings() {
     await act(async () => {
       await agentApi.updatePersona(id, description.trim())
       setDescription('')
-    }, '人格已更新, 她以新的方式理解世界。')
+    }, '人格已更新, 它以新的方式理解世界。')
   }
 
   async function exportMemories() {
@@ -122,24 +122,24 @@ export default function AgentSettings() {
   }
 
   function clearMemories() {
-    if (!confirm('确定清空她对你的所有记忆吗?这是不可逆的。')) return
+    if (!confirm('确定清空它对你的所有记忆吗?这是不可逆的。')) return
     void act(async () => {
       await agentApi.clearMemories(id)
-    }, '她的记忆已清空。')
+    }, '它的记忆已清空。')
   }
 
   function clearUserModel() {
-    if (!confirm('确定让她忘掉对你的所有了解吗?这是不可逆的。')) return
+    if (!confirm('确定让它忘掉对你的所有了解吗?这是不可逆的。')) return
     void act(async () => {
       await agentApi.clearUserModel(id)
-    }, '她对你的了解已清空。')
+    }, '它对你的了解已清空。')
   }
 
   function deleteAgent() {
-    if (!confirm(`确定删除 ${agent.name} 吗?她会永远消失, 你们聊过的一切都不会留下。`)) return
+    if (!confirm(`确定删除 ${agent.name} 吗?它会永远消失, 你们聊过的一切都不会留下。`)) return
     void act(async () => {
       await agentApi.removeAgent(id)
-      // 通讯录的 store 里也要摘掉, 否则返回通讯录时她还挂在那里, 点进去 404
+      // 通讯录的 store 里也要摘掉, 否则返回通讯录时它还挂在那里, 点进去 404
       removeCompanion(id)
       navigate('/contacts', { replace: true })
     }, '')
@@ -178,10 +178,10 @@ export default function AgentSettings() {
           </section>
 
           <section className="card p-5">
-            <PanelSection title="重新描述她" hint="她的性格会重新编译成一个新版本, 旧版本会保留在下面">
+            <PanelSection title="重新描述它" hint="它的性格会重新编译成一个新版本, 旧版本会保留在下面">
               <textarea
                 className="input min-h-28 resize-none"
-                placeholder="描述你想要的她…"
+                placeholder="描述你想要的它…"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
@@ -198,7 +198,7 @@ export default function AgentSettings() {
           </section>
 
           <section className="card p-5">
-            <PanelSection title="人格版本历史" hint="每次演化都留一份, 看得出她是怎么变成现在的样子的">
+            <PanelSection title="人格版本历史" hint="每次演化都留一份, 看得出它是怎么变成现在的样子的">
               {personaVersions.length === 0 && (
                 <p className="text-sm text-ink-faint">还没有版本记录。</p>
               )}
@@ -219,7 +219,7 @@ export default function AgentSettings() {
           </section>
 
           <section className="card p-5">
-            <PanelSection title="她的复盘" hint="每天凌晨她会对自己的经历做一次总结">
+            <PanelSection title="它的复盘" hint="每天凌晨它会对自己经历做一次总结">
               {reflections.length === 0 && (
                 <p className="text-sm text-ink-faint">还没有反思记录。</p>
               )}
@@ -251,7 +251,7 @@ export default function AgentSettings() {
           </section>
 
           <section className="card p-5">
-            <PanelSection title="人生时间线" hint="她来到这个世界之前的那段人生">
+            <PanelSection title="人生时间线" hint="它来到这个世界之前的那段人生">
               {lifeEvents.length === 0 && <p className="text-sm text-ink-faint">还没有经历。</p>}
               {lifeEvents.map((e, i) => (
                 <div key={e.id} className="relative flex gap-3 pb-4">
@@ -283,16 +283,16 @@ export default function AgentSettings() {
                   清空记忆
                 </button>
                 <button type="button" className="btn-danger" onClick={clearUserModel} disabled={busy}>
-                  清空她对你的了解
+                  清空它对你的了解
                 </button>
               </div>
             </PanelSection>
           </section>
 
           <section className="card border-danger/30 p-5">
-            <PanelSection title="危险区" hint="删除后无法恢复, 她会永远消失">
+            <PanelSection title="危险区" hint="删除后无法恢复, 它会永远消失">
               <p className="text-sm text-ink-soft">
-                她的记忆、人格、与你的关系都会一并删除。想留着的话, 先把记忆导出去。
+                它的记忆、人格、与你的关系都会一并删除。想留着的话, 先把记忆导出去。
               </p>
               <button type="button" className="btn-danger" onClick={deleteAgent} disabled={busy}>
                 <Trash2 size={15} />
