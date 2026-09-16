@@ -147,6 +147,32 @@ describe('路由表 · 通讯录的下一层', () => {
   })
 })
 
+describe('路由表 · 「我」的下一层', () => {
+  it('提醒与通知在全屏那一支 —— 它们不是"一栏", 进去之后底部不该还有 tab bar', () => {
+    const paths = childPaths(fullScreenRoutes)
+    for (const p of ['/me/reminders', '/me/notifications']) {
+      expect(paths, `${p} 丢了`).toContain(p)
+    }
+    // 反过来也要断言: 挂进 tab 分支的话 tab bar 会一直在, 而且四项会变成六项 ——
+    // 上面那条「tab 项与 tab 路由一一对应」会红, 但那一条红的原因不会指向这里
+    expect(childPaths(tabRoutes)).not.toContain('/me/reminders')
+  })
+
+  it('/me 本身仍然是 tab, 不是重定向 —— 「我」是一栏, 不是一条记录', () => {
+    const me = (tabRoutes.children ?? []).find((c) => c.path === '/me')
+    expect(me).toBeDefined()
+    expect(redirectTarget(me!)).toBeUndefined()
+  })
+
+  it('两条路径都在 /me/ 之下 —— 不然它们就成了顶层的第五条路, 而顶层没有第五个 tab', () => {
+    // 写成 `/reminders` 也能跑, 症状是"这一页没有入口能到" —— 除了地址栏
+    const under = childPaths(fullScreenRoutes).filter(
+      (p) => p.includes('reminder') || p.includes('notification'),
+    )
+    expect(under.sort()).toEqual(['/me/notifications', '/me/reminders'])
+  })
+})
+
 describe('路由表 · 老路径的落点', () => {
   it.each([
     ['/companions', '/contacts'],

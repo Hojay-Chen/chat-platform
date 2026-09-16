@@ -11,11 +11,13 @@ import Contacts from '@/pages/contacts/Contacts'
 import AgentProfile from '@/pages/contacts/AgentProfile'
 import AgentSettings from '@/pages/contacts/AgentSettings'
 import CompanionCreate from '@/pages/CompanionCreate'
-import ApplicationMarket from '@/pages/ApplicationMarket'
+import Discover from '@/pages/Discover'
 import ApplicationDetail from '@/pages/ApplicationDetail'
 import AppSession from '@/pages/AppSession'
 import JoinSession from '@/pages/JoinSession'
 import Me from '@/pages/me/Me'
+import Reminders from '@/pages/me/Reminders'
+import Notifications from '@/pages/me/Notifications'
 
 /**
  * 路由表。抽出来单独一个文件, 而不是写在 `App.tsx` 里, 是为了它**可以被断言**。
@@ -60,7 +62,7 @@ export const tabRoutes: RouteObject = {
     { path: '/', element: <Navigate to="/chat" replace /> },
     { path: '/chat', element: <ChatList /> },
     { path: '/contacts', element: <Contacts /> },
-    { path: '/discover', element: <ApplicationMarket /> },
+    { path: '/discover', element: <Discover /> },
     { path: '/me', element: <Me /> },
   ],
 }
@@ -93,6 +95,13 @@ export const fullScreenRoutes: RouteObject = {
     { path: '/contacts/new', element: <CompanionCreate /> },
     { path: '/contacts/agent/:companionId', element: <AgentProfile /> },
     { path: '/contacts/agent/:companionId/settings', element: <AgentSettings /> },
+
+    // 「我」的下一层: 提醒与通知。
+    //
+    // 它们**不在** tab 那一支, 因为它们不是"一栏", 是「我」里面的两条记录 ——
+    // 进去之后底部不该还压着一条 tab bar。微信也是这个形状: 点进「设置」就没有 tab bar 了。
+    { path: '/me/reminders', element: <Reminders /> },
+    { path: '/me/notifications', element: <Notifications /> },
 
     { path: '/applications/:applicationId', element: <ApplicationDetail /> },
     { path: '/applications/:applicationId/sessions/:sessionId', element: <AppSession /> },

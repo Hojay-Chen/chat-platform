@@ -1,0 +1,238 @@
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Boxes, Play, Sparkles } from 'lucide-react'
+import { EmptyState } from '@/components/im/EmptyState'
+import { PanelError, PanelLoading } from '@/components/agent/PanelState'
+import {
+  lap,
+  LapError,
+  type ApplicationView,
+  type CapabilityView,
+  type SessionResponse,
+} from '@/api/lap'
+
+/**
+ * 「发现」—— 微信四 tab 里的第三格。
+ *
+ * <h2>为什么这一屏直接就是应用市场, 而不是一张"小程序 ›"的入口列表</h2>
+ *
+ * 微信的「发现」是一列入口(朋友圈 / 视频号 / 扫一扫 / 小程序), 因为那一屏有六七个
+ * 各不相同的东西。而这个平台今天在「发现」下面只有**一样**东西: 应用。
+ *
+ * 给一样东西做一个只有一行的目录, 换来的是每次进来多一次点击, 以及一个必须永远
+ * 与真实数量保持同步的中间页 —— 而它一旦不同步, 症状是"入口在但里面是空的"。
+ * 所以这里把市场本身当成了这一屏。等二期真有第二样东西(比如"附近的 Agent")时,
+ * 那时候再引入一层目录才是对的; 那时改动也只是在这一屏上面加一段列表。
+ *
+ * <h2>两种逛法, 因为来的人有两种</h2>
+ *
+ * <ul>
+ *   <li><b>知道要做什么</b>("我想下棋") —— 按能力筛。能力就是"我想干什么"的词表。</li>
+ *   <li><b>只是想看看</b> —— 直接列全部在架应用。</li>
+ * </ul>
+ *
+ * 能力筛选是<b>客户端</b>筛的(拿应用列表与能力列表在本地对), 不是多一次请求: 市场本来
+ * 就一次把在架应用拿全了, 再为每次点能力跑一趟服务端只会让切换变慢。`GET
+ * /api/v1/capabilities/{id}/applications` 是存在的, 但它是给"我知道要什么、且不想
+ * 把整个市场拉下来"的客户端用的 —— 这里不是那种情况。
+ *
+ * <h2>"打开"在这里只是"开一局"</h2>
+ *
+ * 卡片上的「打开」直接建会话并进会话页, 不走详情页。这与老 `ApplicationMarket` 的
+ * "先看详情再决定"是相反的取舍: 详情页仍然在(点卡片正文进), 但"打开"这个按钮的
+ * 语义是**明确的动作**, 而按下一个明确写着"打开"的按钮之后再让用户看一页介绍,
+ * 是在惩罚那些已经知道自己要什么的人。想先了解的人点的是卡片正文。
+ *
+ * <h2>这一页里没有一个应用的名字</h2>
+ *
+ * 名字、图标、描述全部来自 `lap.market()` 的响应。写死一张表会让"新应用接进来"
+ * 从一个零改动的动作变成一次前端发版 —— `ApplicationCardBubble.test.tsx` 有一条
+ * 源码扫描在守这件事, 这个文件在那张扫描表里。
+ */
+export default function Discover() {
+  const navigate = useNavigate()
+  const [applications, setApplications] = useState<ApplicationView[]>([])
+  const [capabilities, setCapabilities] = useState<CapabilityView[]>([])
+  const [capability, setCapability] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const report = useCallback((e: unknown) => {
+    if (e instanceof LapError) setError(`${e.code} — ${e.message}`)
+    else setError(e instanceof Error ? e.message : String(e))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([lap.market(), lap.capabilities()])
+      .then(([apps, caps]) => {
+        if (cancelled) return
+        setApplications(apps)
+        setCapabilities(caps)
+        setLoading(false)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        report(e)
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [report])
+
+  /**
+   * 直接开一局 —— 给"我已经知道要下棋, 别让我再看一页"的人。
+   *
+   * 它走的端点与详情页里的"打开"完全一样; 这里只是少了一次跳转, 不是另一条捷径。
+   */
+  async function openNow(applicationId: string) {
+    setBusy(true)
+    setError('')
+    try {
+      const session: SessionResponse = await lap.openSession(applicationId)
+      navigate(`/applications/${encodeURIComponent(applicationId)}/sessions/${session.sessionId}`)
+    } catch (e) {
+      report(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const shown = capability
+    ? applications.filter((a) => a.capabilities?.includes(capability))
+    : applications
+
+  return (
+    <div className="mx-auto w-full max-w-[600px]">
+      <header className="sticky top-0 z-10 border-b border-line bg-surface/85 backdrop-blur">
+        <h1 className="px-4 py-3 text-lg font-semibold tracking-tight text-ink">发现</h1>
+      </header>
+
+      <div className="px-4 py-4">
+        <p className="text-sm leading-relaxed text-ink-soft">
+          打开一个应用就是开一场会话 —— 可以邀请真人和数字人一起进来。
+        </p>
+
+        {error && (
+          <div className="mt-4">
+            <PanelError message={error} />
+          </div>
+        )}
+
+        {loading && (
+          <div className="mt-4">
+            <PanelLoading label="正在看有什么可以玩…" />
+          </div>
+        )}
+
+        {!loading && (
+          <>
+            {/* 能力筛选。`全部` 是显式的第一项而不是"再点一次取消" ——
+                后者要求用户猜到当前选中的那个按钮是可点的开关 */}
+            {capabilities.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCapability(null)}
+                  className={capability === null ? 'btn-primary !px-3 !py-1 text-xs' : 'btn-ghost !px-3 !py-1 text-xs'}
+                >
+                  全部
+                </button>
+                {capabilities.map((c) => (
+                  <button
+                    key={c.capabilityId}
+                    type="button"
+                    onClick={() => setCapability(c.capabilityId)}
+                    className={
+                      c.capabilityId === capability
+                        ? 'btn-primary !px-3 !py-1 text-xs'
+                        : 'btn-ghost !px-3 !py-1 text-xs'
+                    }
+                    title={c.description ?? undefined}
+                  >
+                    {c.title || c.capabilityId}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {shown.length === 0 ? (
+              <EmptyState
+                icon={<Boxes size={28} />}
+                title={capability ? '这个能力下暂时没有在架的应用' : '市场里还没有应用'}
+                hint={
+                  capability
+                    ? '换一个能力看看, 或者点「全部」。'
+                    : '应用接进来之后会自动出现在这里 —— 这里没有一张写死的清单。'
+                }
+                action={
+                  capability ? (
+                    <button
+                      type="button"
+                      className="btn-outline text-xs"
+                      onClick={() => setCapability(null)}
+                    >
+                      看全部
+                    </button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {shown.map((a) => (
+                  <div key={a.applicationId} className="card flex flex-col gap-3 p-3">
+                    {/* 卡片正文进详情页, 按钮直接开局 —— 两个动作分开,
+                        因为"我想了解"和"我要开一局"是两种意图 */}
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/applications/${encodeURIComponent(a.applicationId)}`)}
+                      className="block text-left"
+                    >
+                      <span className="block text-[15px] font-medium text-ink">
+                        {a.name || a.applicationId}
+                      </span>
+                      {/* 版本号用等宽 —— 这类技术标识在比例字体里会随数字抖动 */}
+                      <span className="mt-0.5 block font-mono text-[11px] text-ink-faint">
+                        {a.applicationId} v{a.version}
+                      </span>
+                      {a.description && (
+                        <span className="mt-2 block text-[13px] leading-5 text-ink-soft">
+                          {a.description}
+                        </span>
+                      )}
+                    </button>
+                    <div className="mt-auto flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void openNow(a.applicationId)}
+                        className="btn-primary !px-3 !py-1 text-xs disabled:opacity-55"
+                      >
+                        <Play size={13} />
+                        打开
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/applications/${encodeURIComponent(a.applicationId)}`)}
+                        className="btn-ghost !px-3 !py-1 text-xs"
+                      >
+                        详情
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="mt-8 flex items-start gap-2 text-xs leading-relaxed text-ink-faint">
+              <Sparkles size={13} className="mt-0.5 shrink-0" />
+              数字人走的是同一个市场、同一条打开链路 —— 它们没有专用接口。
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

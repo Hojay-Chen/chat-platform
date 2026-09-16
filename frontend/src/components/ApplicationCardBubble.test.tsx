@@ -148,8 +148,28 @@ describe('聊天侧的前端也不认识任何具体应用', () => {
     'src/components/agent/MemoriesPanel.tsx',
     'src/components/agent/UserModelPanel.tsx',
     'src/components/agent/RelationshipPanel.tsx',
+    // 第 7 步: 「发现」这一屏**就是**应用市场, 它是"顺手写死一个应用名"最可能发生的地方
+    // (市场页为了让某个应用好看一点而硬编码一个图标或名字, 是最自然的错误)。
+    // 「我」下面那两页扫进来是因为它们渲染 Agent 域的数据。
+    'src/pages/Discover.tsx',
+    'src/pages/me/Me.tsx',
+    'src/pages/me/Reminders.tsx',
+    'src/pages/me/Notifications.tsx',
+    'src/lib/agentScoped.ts',
   ]
 
+  /**
+   * 被禁的词。前三条是应用 id, 中间两条是中文名, 后六条是动作 id。
+   *
+   * 动作 id 这里写的是**全名**(`reminder.create` 那一组)而不是前缀 `reminder.` ——
+   * 第 7 步把 `lib/agentScoped.ts` 扫进来时前缀写法立刻炸了: 那个文件里有一个
+   * 形参就叫 `reminder`, 于是 `reminder.status === 'done'` 命中了 `reminder.`。
+   *
+   * 那个命中什么也不代表 —— 一个叫 `reminder` 的变量不是"认识提醒这个应用"。
+   * 但把它当成误报直接删掉前缀是不对的: `reminder.` 当初被写进来, 防的正是
+   * `reminder.create` 这类硬编码。所以改成写全名 —— 约束的**范围**一点没缩,
+   * 只是它现在咬的是真东西。`game.make_move` 本来就一直是全名。
+   */
   const FORBIDDEN = [
     'com.luxera.tictactoe',
     'com.luxera.gomoku',
@@ -158,7 +178,11 @@ describe('聊天侧的前端也不认识任何具体应用', () => {
     '五子棋',
     'game.make_move',
     'gomoku.',
-    'reminder.',
+    'reminder.create',
+    'reminder.update',
+    'reminder.complete',
+    'reminder.cancel',
+    'reminder.list',
   ]
 
   it.each(FILES)('%s 里没有任何一个具体应用的名字', (relative) => {

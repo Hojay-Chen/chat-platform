@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 /**
- * 按 `companionId` 拉一块数据。资料页的四个面板都用它。
+ * 按一个身份键拉一块数据。资料页的四个面板、「我 → 提醒 / 通知」都用它。
  *
  * <h2>它替掉的不是"几行样板", 是一个真的 bug</h2>
  *
@@ -15,14 +15,14 @@ import { useEffect, useRef, useState } from 'react'
  * 生活、A 的关系、A 的记忆**, 直到请求回来才换掉 —— 而如果那两个请求的返回顺序颠倒,
  * 结果是 A 和 B 的数据混在同一屏上。用户看到的是一份不存在的人。
  *
- * 这个 hook 做两件事: **id 一变就立刻清空**(不显示上一个人的数据), 以及**卸载/换人
+ * 这个 hook 做两件事: **key 一变就立刻清空**(不显示上一个人的数据), 以及**卸载/换人
  * 之后回来的响应直接丢掉**(不覆盖新数据)。
  *
  * <h2>`initial` 与 `load` 为什么进 ref</h2>
  *
  * 它们都是调用方每次渲染新建的字面量(`[]`、`{}`)或箭头函数。放进 deps 会让 effect
  * 每渲染一次就重跑一次 —— 那是无限循环。放进 ref 之后, effect 的依赖只剩
- * `companionId` 一个, 而那正是这段数据真正的身份。
+ * `resourceKey` 一个, 而那正是这段数据真正的身份。
  */
 
 export interface AgentData<T> {
@@ -46,7 +46,12 @@ function messageOf(e: unknown): string {
 }
 
 export function useAgentData<T>(
-  companionId: string | undefined,
+  /**
+   * 这块数据的身份。绝大多数时候是 `companionId`, 而「我 → 提醒」那里是**当前有哪些
+   * Agent** 拼起来的串 —— 它的数据来自 N 个 Agent, 身份就是那 N 个 id 的集合。
+   * 名字不叫 `companionId`, 是因为叫了它, 那个页面就只能硬塞一个假的 id 进来。
+   */
+  resourceKey: string | undefined,
   load: (id: string) => Promise<T>,
   initial: T,
 ): AgentData<T> {
@@ -56,13 +61,13 @@ export function useAgentData<T>(
 
   const [state, setState] = useState<Omit<AgentData<T>, 'reload'>>({
     data: initialRef.current,
-    loading: Boolean(companionId),
+    loading: Boolean(resourceKey),
     error: '',
   })
   const [nonce, setNonce] = useState(0)
 
   useEffect(() => {
-    if (!companionId) {
+    if (!resourceKey) {
       setState({ data: initialRef.current, loading: false, error: '' })
       return
     }
@@ -71,7 +76,7 @@ export function useAgentData<T>(
     // 先清空再拉 —— 见文件头: 这一行就是"看到上一个 Agent 的数据"那个 bug 的修复
     setState({ data: initialRef.current, loading: true, error: '' })
 
-    loadRef.current(companionId).then(
+    loadRef.current(resourceKey).then(
       (data) => {
         if (!cancelled) setState({ data, loading: false, error: '' })
       },
@@ -83,7 +88,7 @@ export function useAgentData<T>(
     return () => {
       cancelled = true
     }
-  }, [companionId, nonce])
+  }, [resourceKey, nonce])
 
   return { ...state, reload: () => setNonce((n) => n + 1) }
 }
