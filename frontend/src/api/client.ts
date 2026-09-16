@@ -1,13 +1,23 @@
 const TOKEN_KEY = 'companion_token'
 
+/**
+ * 单测跑在 `environment: 'node'` 下, 那里没有 localStorage。
+ * 这不是为测试而加的开关 —— 它是"这个模块被 import 时不该碰宿主环境"这条规矩,
+ * 路由表被测时 RequireAuth 会读 token, 没有这行整个 routes.test 起不来。
+ * 真机上 localStorage 一定存在, 走的是同一条路径。
+ */
+function storage(): Storage | null {
+  return typeof localStorage === 'undefined' ? null : localStorage
+}
+
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+  return storage()?.getItem(TOKEN_KEY) ?? null
 }
 export function setToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token)
+  storage()?.setItem(TOKEN_KEY, token)
 }
 export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY)
+  storage()?.removeItem(TOKEN_KEY)
 }
 
 /**
