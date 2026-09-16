@@ -127,3 +127,54 @@ export async function setPinned(conversationId: string, pinned: boolean): Promis
 export async function setMuted(conversationId: string, muted: boolean): Promise<void> {
   await api.post<void>(`/api/conversations/${conversationId}/mute`, { muted })
 }
+
+// ── 发消息 ──────────────────────────────────────────────────────────
+
+/** 一条待发出的消息。`clientMessageId` 既是幂等键, 也是 temp→canonical 的对应键 */
+export interface OutgoingMessage {
+  content: string
+  clientMessageId: string
+}
+
+/** 服务端回传的已落库消息。字段是 `Message` 的子集, 只带 temp→canonical 替换要用的那几个 */
+export interface CanonicalMessage {
+  id: string
+  clientMessageId?: string | null
+  content: string
+  conversationId: string
+  senderType: string
+  senderId?: string | null
+  deliveryStatus?: string | null
+  createdAt: string
+}
+
+export interface SendResult {
+  status: string
+  messageId: string
+  messages: CanonicalMessage[]
+}
+
+/**
+ * 发一批消息。**一次请求至多触发一次回复** —— 所以连发的多句必须一起送,
+ * 分开送对方就会回多次(见 `lib/burstWindow.ts` 的长注释)。
+ *
+ * <h2>为什么路径里是 companionId, 不是 conversationId</h2>
+ *
+ * 这个端点住在聊天平台**自己**的面上(`/api/companions/{c}/conversations/{v}/messages`,
+ * 8081 实现), 它是"往这段对话里说一句话, 并让对面的数字人有机会回应"—— 触发认知链正是
+ * 它存在的全部意义, 而 `companionId` 是触发所需的那半个键。
+ *
+ * 与它相邻的 `/api/conversations/{id}/...` 那一套是**只读 + 读状态**, 后端刻意没在那边
+ * 提供发消息: 一个不触发任何事件的发送端点在一期里唯一的作用, 是把"agent 不回我了"
+ * 这个 bug 引进来。二期真有真人会话时, 那条路径会在那边落地, 并且**不**触发 LLM。
+ */
+export async function sendMessages(
+  companionId: string,
+  conversationId: string,
+  batch: readonly OutgoingMessage[],
+): Promise<SendResult> {
+  return api.post<SendResult>(
+    `/api/companions/${companionId}/conversations/${conversationId}/messages`,
+    { messages: batch.map((b) => ({ content: b.content, clientMessageId: b.clientMessageId })) },
+  )
+}

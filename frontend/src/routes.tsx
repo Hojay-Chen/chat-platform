@@ -7,6 +7,7 @@ import Login from '@/pages/Login'
 import Register from '@/pages/Register'
 import Companions from '@/pages/Companions'
 import ChatList from '@/pages/chat/ChatList'
+import ChatRoom from '@/pages/chat/ChatRoom'
 import CompanionCreate from '@/pages/CompanionCreate'
 import Chat from '@/pages/Chat'
 import Settings from '@/pages/Settings'
@@ -69,6 +70,9 @@ export const fullScreenRoutes: RouteObject = {
     </RequireAuth>
   ),
   children: [
+    // 聊天室。**它下面不许有静态子路由** —— 一旦有人加 `/chat/new`,
+    // react-router 会把 `new` 当成 conversationId 匹配进来。「发起群聊」用弹层, 不用路由。
+    { path: '/chat/:conversationId', element: <ChatRoom /> },
     { path: '/applications/:applicationId', element: <ApplicationDetail /> },
     { path: '/applications/:applicationId/sessions/:sessionId', element: <AppSession /> },
     // 只有 sessionId 的那条路 —— 从分享链接兑票进来时走这里。

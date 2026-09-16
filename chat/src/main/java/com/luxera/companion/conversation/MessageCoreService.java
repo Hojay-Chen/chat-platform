@@ -104,7 +104,24 @@ public class MessageCoreService {
                     null, null, null, false, null, null, null, item.getClientMessageId());
             persisted.add(m);
             newMessages.add(m);
+        }
 
+        if (persisted.isEmpty()) {
+            throw new IllegalArgumentException("消息不能为空");
+        }
+
+        // flush 是**为了 createdAt 不是空的**, 不是为了持久化 —— 落库本来就会在事务提交时发生。
+        //
+        // `Message.createdAt` 是 `@CreationTimestamp`, 而 Hibernate 在 **flush 时**才给它赋值,
+        // 不是在 `save()` 时。所以不 flush 就去构造视图/发事件, 前端拿到的每条 canonical 消息
+        // `createdAt` 都是 null(控制器把它写成空串), MESSAGE_CREATED 事件的 `at` 也是空串
+        // —— 两个消费者都会看到"刚刚创建的消息没有时间"。
+        //
+        // 自己塞 `LocalDateTime.now()` 是不行的: 时间戳该由那一次写入决定, 应用层再写一遍就有
+        // 两个"创建时间", 而它们不一致时没人知道该信哪个。flush 是一次往返, 一批连发只有一次。
+        messageRepository.flush();
+
+        for (Message m : newMessages) {
             // Outbox: 消息已持久化的事件(前端据此 temp → canonical)
             eventBus.publish(companionId, CompanionEventType.MESSAGE_CREATED, Map.of(
                     "messageId", m.getId(),
@@ -113,10 +130,6 @@ public class MessageCoreService {
                     "content", m.getContent(),
                     "status", DELIVERED,
                     "at", m.getCreatedAt() == null ? "" : m.getCreatedAt().toString()));
-        }
-
-        if (persisted.isEmpty()) {
-            throw new IllegalArgumentException("消息不能为空");
         }
 
         if (!newMessages.isEmpty()) {

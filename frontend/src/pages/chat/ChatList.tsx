@@ -101,15 +101,10 @@ export default function ChatList() {
 /**
  * 一行会话点开之后去哪。
  *
- * **第 5 步会把它改成 `/chat/${summary.id}`** —— 那是正解: 会话 id 必须在 URL 里,
- * 否则刷新页面会跳到"第一个会话"而不是你正在看的那个(今天的 `Chat.tsx` 正是这样,
- * `activeConvId` 是本地 state)。
- *
- * 现在还不能这么写: `/chat/:conversationId` 那一条路由要等第 5 步的 `ChatRoom` 才存在,
- * 而今天挂在这个位置上的老 `Chat.tsx` 把 URL 参数当**伴侣 id** 用(`useParams<{id}>`
- * 之后直接去调 `conversations/first`)。把会话 id 传给它, 它会拿它当伴侣 id 去查 ——
- * 一个能点、但点开是错的入口。所以这一步先按今天真正成立的那条路走, 站点始终可跑。
+ * 路径里是**会话 id**, 不是伴侣 id —— 这是这一期最要紧的一处修正。一个伴侣可以有多段
+ * 对话, 而"我在看哪一段"是 URL 该记住的事: 老实现把它放在 `Chat.tsx` 的局部 state 里,
+ * 于是刷新页面会跳到第一个会话, 而不是你正在看的那个。刷新、分享、后退现在都成立。
  */
-function chatRoomHref(summary: { id: string; peer: { id: string } }): string {
-  return `/companions/${summary.peer.id}`
+function chatRoomHref(summary: { id: string }): string {
+  return `/chat/${summary.id}`
 }

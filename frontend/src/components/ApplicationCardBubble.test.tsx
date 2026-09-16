@@ -120,9 +120,14 @@ describe('聊天侧的前端也不认识任何具体应用', () => {
    * 全都来自 `metadata` / `GET .../applications` 的响应, 而不是页面里的一张硬编码表。
    * 一张硬编码表会让"新应用接进来"从一个零改动的动作变成一次前端发版。
    */
+  // 第 5 步新增: 这两个文件也在"画消息"的路径上, 而且 `ChatRoomPanel` 会列出
+  // 「可以开一个」的清单。清单里那些名字从 `GET .../applications` 的响应来,
+  // 一旦有人为了让某个应用好看起来在这里写死一个名字, 这条断言就会红。
   const FILES = [
     'src/components/ApplicationCardBubble.tsx',
     'src/api/chatApplications.ts',
+    'src/pages/chat/ChatRoom.tsx',
+    'src/pages/chat/ChatRoomPanel.tsx',
   ]
 
   const FORBIDDEN = [

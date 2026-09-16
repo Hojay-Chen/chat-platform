@@ -86,17 +86,22 @@ describe('路由表 · 四 tab（布局 A）', () => {
 
 describe('路由表 · 全屏（布局 B）', () => {
   it('聊天室不在 tab 分支里 —— 挂进去底部会压着一条 tab bar, 输入框被顶到屏幕外', () => {
+    expect(childPaths(tabRoutes)).not.toContain('/chat/:conversationId')
     expect(childPaths(tabRoutes)).not.toContain('/companions/:id')
   })
 
-  it('聊天室此刻仍在 /companions/:id —— 第 5 步随 ChatRoom 一起搬到 /chat/:conversationId', () => {
-    // 这里是**当前事实**, 不是终态。终态是 `/chat/:conversationId`:
-    // 今天 activeConvId 是 Chat.tsx 里的局部 state, URL 里只有伴侣 id,
-    // 于是刷新页面会跳到第一个会话而不是你在看的那个。
-    // 提前把这条路径挂上去做不到 —— `Chat` 读的是 `useParams<{id}>`(一个 companionId),
-    // 而 `/chat/:conversationId` 里那一段是会话 id, 两者不是一回事。
-    // 第 5 步 `ChatRoom` 落地时, 这个断言与那边一起翻。
-    expect(childPaths(fullScreenRoutes)).toContain('/companions/:id')
+  it('聊天室是 /chat/:conversationId, 且它在全屏那一支', () => {
+    // 这一条钉住的是"一段对话由会话 id 寻址"。写成 `/chat/:id`(伴侣 id) 也能跑,
+    // 但刷新页面就会跳到第一个会话 —— 一个伴侣可以有多段对话, 那不是同一个东西。
+    expect(childPaths(fullScreenRoutes)).toContain('/chat/:conversationId')
+  })
+
+  it('/chat 下没有静态子路由 —— 有的话 react-router 会把那一段当成 conversationId', () => {
+    // `/chat/new` 这种写法在 react-router 7 里不会报错: 它优先匹配静态段,
+    // 但一旦有人把路径写成 `/chat/:conversationId/xxx` 或加了 `/chat/new` 又改回来,
+    // 症状是"点发起群聊进入了某个人的聊天室, 而且那一段 id 是 `new`"。
+    const under = childPaths(fullScreenRoutes).filter((p) => p.startsWith('/chat/'))
+    expect(under).toEqual(['/chat/:conversationId'])
   })
 
   it('分享票那三条路都在 —— §16 的单入口链路上有旧链接在外面', () => {
@@ -120,7 +125,11 @@ describe('路由表 · 老路径的落点', () => {
     expect(redirectTarget(findTop(from)!)).toBe(to)
   })
 
-  it('/companions/:id 仍然可达 —— 老链接不能断, 第 5 步才换', () => {
+  it('/companions/:id 仍然可达 —— 老链接不能断, 第 6 步才换', () => {
+    // 第 5 步没有删它: 新建 Agent 的流程是「创建 → navigate(/companions/:id) → 老 Chat
+    // 调 conversations/first 建会话并触发问候语」。会话还只由那一条路创建出来,
+    // 删掉它, 刚建好的 Agent 会既不在消息列表里、也没有第一句问候。
+    // 第 6 步资料页建好之后, 那条路改成「创建 → 资料页 → 开始聊天」, 它才随 Chat.tsx 一起走。
     expect(childPaths(fullScreenRoutes)).toContain('/companions/:id')
   })
 })

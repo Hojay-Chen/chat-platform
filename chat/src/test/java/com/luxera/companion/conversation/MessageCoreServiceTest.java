@@ -105,6 +105,31 @@ class MessageCoreServiceTest {
         assertEquals("第二条", all.get(1).getContent());
     }
 
+    /**
+     * 返回给前端的 canonical 消息**必须带着创建时间**。
+     *
+     * <p>这条是实测出来的, 不是想出来的: 真机发一条消息, 响应里
+     * {@code "createdAt":""} —— 因为 {@code Message.createdAt} 是
+     * {@code @CreationTimestamp}, Hibernate 在 **flush 时**才赋值, 而视图是在
+     * flush 之前构造的, 于是拿到 null, 控制器再把它写成空串。
+     *
+     * <p>前端此刻不读这个字段(它用本地时钟先把乐观气泡画出来), 所以症状是隐形的:
+     * 谁哪天想拿它排个序或格式化成时间, 会得到 {@code Invalid Date}。
+     * 一个"偶尔是对的"字段比一个明确没有的字段更危险, 所以这里钉死。
+     */
+    @Test
+    void canonicalMessagesCarryCreatedAt() {
+        MessageCoreService.SendItem item = new MessageCoreService.SendItem();
+        item.setContent("时间戳测试");
+        item.setClientMessageId("c-time");
+
+        MessageCoreService.SendResult result = messageCoreService.send(
+                "v8-user", companionId, conversationId, List.of(item));
+
+        assertNotNull(result.last().getCreatedAt(),
+                "canonical 消息没有 createdAt —— 是不是把 flush 删掉了?");
+    }
+
     @Test
     void emptyMessageRejected() {
         MessageCoreService.SendItem empty = new MessageCoreService.SendItem();
