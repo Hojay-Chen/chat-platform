@@ -1,3 +1,23 @@
+/**
+ * 会话对面的那个人「是什么」。
+ *
+ * 一期的 `PeerKind` 恒为 `'companion'` —— 今天每一个会话的对面都是一个数字人。
+ * 之所以现在就把它写出来, 是因为二期会同时出现三种对面: 真人(`'user'`)、群(`'group'`),
+ * 以及数字人(`'companion'`)。而 `companionId: string` 这个名字一旦长进组件签名里,
+ * 二期就是一次全仓签名手术 —— 它出现在 URL 参数、`chatApplications.open()`、
+ * `openEventStream()`、`ApplicationCardBubble` 的 props 和 7 个面板的 props 上。
+ *
+ * 所以新组件一律收 `PeerRef`, 只有 `api/` 那一层知道怎么把它翻译回具体路径段。
+ */
+export type PeerKind = 'companion' | 'user' | 'group' | 'system'
+
+export interface PeerRef {
+  kind: PeerKind
+  id: string
+  /** 显示名。列表行本来就有名字, 带上可以省一次查询; 缺了也不影响寻址 */
+  name?: string
+}
+
 export interface User {
   id: string
   username: string
@@ -120,6 +140,16 @@ export interface Message {
   id: string
   conversationId: string
   senderType: 'user' | 'companion' | 'system'
+  /**
+   * 这条消息**是谁**发的 —— `senderType` 只说"以什么身份", 这个说"哪一个"。
+   *
+   * 一期一对一里它和 `senderType` 是冗余的, 但群聊里不是: 一条 `senderType='user'`
+   * 的消息, 作者可能是群里任何一个人。消息气泡靠它决定显不显示头像和昵称。
+   *
+   * **可以为 null**: 加这一列之前的历史消息没有这个值, 而 `ddl-auto: update`
+   * 既不能给非空表加 NOT NULL 列, 也补不出老数据的值。
+   */
+  senderId?: string | null
   content: string
   /** 客户端幂等键(乐观消息 → canonical 消息的对应键) */
   clientMessageId?: string | null

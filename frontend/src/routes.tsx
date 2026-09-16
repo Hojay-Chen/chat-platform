@@ -6,6 +6,7 @@ import FullScreenLayout from '@/layouts/FullScreenLayout'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
 import Companions from '@/pages/Companions'
+import ChatList from '@/pages/chat/ChatList'
 import CompanionCreate from '@/pages/CompanionCreate'
 import Chat from '@/pages/Chat'
 import Settings from '@/pages/Settings'
@@ -43,8 +44,7 @@ export const tabRoutes: RouteObject = {
   ),
   children: [
     { path: '/', element: <Navigate to="/chat" replace /> },
-    // 第 4 步换成 ChatList —— 现在先挂旧页面, 站点任何时刻都要能跑
-    { path: '/chat', element: <Companions /> },
+    { path: '/chat', element: <ChatList /> },
     // 第 6 步换成 Contacts（同一份数据的另一种排法: 按人 vs 按最近消息）
     { path: '/contacts', element: <Companions /> },
     { path: '/discover', element: <ApplicationMarket /> },
