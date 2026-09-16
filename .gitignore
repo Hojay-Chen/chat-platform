@@ -9,7 +9,9 @@ backend/**/target/
 hs_err_pid*
 
 # ── Node / Vite ───────────────────────
-frontend/node_modules/
+# 不锚路径: 在仓库根误跑一次 `npx vitest` 就会在根建出 node_modules/.vite/ 缓存,
+# 锚定的规则看不见它, git status 里就多出一个不该有的未跟踪目录。
+node_modules/
 frontend/dist/
 frontend/*.tsbuildinfo
 *.tsbuildinfo

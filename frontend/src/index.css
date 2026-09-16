@@ -2,15 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * 主题变量。亮色是默认 —— `:root` 就是亮色, 只有 `.dark` 覆盖它。
+ *
+ * 这样做而不是反过来, 是因为"默认亮色"是产品决定: 没选过主题的用户、
+ * 以及任何读不到 localStorage 的场景(SSR/无痕/首屏脚本失败)都该落到亮色。
+ *
+ * 值写成 `R G B` 三段而不是 `#hex`, 因为 Tailwind 的 `<alpha-value>` 要往里插
+ * 透明度 —— 写成 hex 的话 `bg-accent/10` 这类写法会静默失效。
+ */
 :root {
-  --color-bg: #14100e;
-  --color-surface: #1a1512;
-  --color-raised: #211a16;
-  --color-line: #332a21;
-  --color-ink: #efe5d6;
-  --color-ink-soft: #a89a8e;
-  --color-ember: #d97757;
-  --color-ember-soft: #e8b467;
+  --surface: 255 255 255;
+  --raised: 255 255 255;
+  --sunken: 244 245 247;
+  --scrim: 15 23 42;
+
+  --line: 226 232 240;
+  --line-strong: 203 213 225;
+
+  --ink: 15 23 42;
+  --ink-soft: 71 85 105;
+  --ink-faint: 148 163 184;
+
+  /* 电光蓝 #2563EB */
+  --accent: 37 99 235;
+  --accent-soft: 219 234 254;
+  --accent-ink: 255 255 255;
+
+  --ok: 22 163 74;
+  --warn: 217 119 6;
+  --danger: 220 38 38;
+
+  --bubble-in: 244 245 247;
+  --bubble-out: 37 99 235;
+  --bubble-out-ink: 255 255 255;
+
+  --shadow-pop: 0 8px 32px -8px rgb(15 23 42 / 0.16), 0 2px 8px -2px rgb(15 23 42 / 0.08);
+  color-scheme: light;
+}
+
+.dark {
+  --surface: 9 11 15;
+  --raised: 17 20 26;
+  --sunken: 13 16 21;
+  --scrim: 0 0 0;
+
+  --line: 31 36 45;
+  --line-strong: 45 52 64;
+
+  --ink: 237 241 245;
+  --ink-soft: 148 163 184;
+  --ink-faint: 100 116 139;
+
+  /* 暗底上提亮一档 —— 同一个 #2563EB 在近黑背景上对比度不够 */
+  --accent: 59 130 246;
+  --accent-soft: 30 58 138;
+  --accent-ink: 255 255 255;
+
+  --ok: 52 211 153;
+  --warn: 251 191 36;
+  --danger: 248 113 113;
+
+  --bubble-in: 26 31 40;
+  --bubble-out: 37 99 235;
+  --bubble-out-ink: 255 255 255;
+
+  --shadow-pop: 0 8px 32px -8px rgb(0 0 0 / 0.5), 0 2px 8px -2px rgb(0 0 0 / 0.3);
   color-scheme: dark;
 }
 
@@ -20,23 +77,30 @@
     text-rendering: optimizeLegibility;
   }
   body {
-    @apply bg-cocoa-950 text-cocoa-100 font-sans;
+    @apply bg-surface text-ink font-sans;
   }
   ::selection {
-    background: rgba(217, 119, 87, 0.28);
+    background: rgb(var(--accent) / 0.22);
+  }
+  /**
+   * 时间戳、未读数、ID 一律等宽数字。
+   * 这是"科技感"最省的一处兑现: 数字不跳, 列表就不会在轮询刷新时抖动。
+   */
+  .tnum {
+    font-variant-numeric: tabular-nums;
   }
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
   ::-webkit-scrollbar-thumb {
-    background: #332a21;
+    background: rgb(var(--line));
     border-radius: 8px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #473a2d;
+    background: rgb(var(--line-strong));
     background-clip: padding-box;
     border: 2px solid transparent;
   }
@@ -46,52 +110,70 @@
 }
 
 @layer components {
+  /**
+   * 这 12 个语义类吸收了全站约 79 处调用点 —— 改定义就等于改那 79 处。
+   * 它们现在指向语义 token, 于是自动获得双主题。
+   */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-150 select-none;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors select-none;
   }
   .btn-primary {
-    @apply btn bg-ember text-cocoa-950 hover:bg-ember-soft hover:shadow-glow;
+    @apply btn bg-accent text-accent-ink hover:bg-accent/90;
   }
   .btn-ghost {
-    @apply btn bg-cocoa-800 text-cocoa-200 hover:bg-cocoa-700 border border-cocoa-700;
+    @apply btn bg-sunken text-ink hover:bg-line;
   }
   .btn-outline {
-    @apply btn border border-cocoa-600 text-cocoa-200 hover:border-ember-soft hover:text-ember-soft;
+    @apply btn border border-line text-ink hover:border-line-strong hover:bg-sunken;
   }
   .btn-danger {
-    @apply btn bg-rosewood/20 text-rosewood-soft border border-rosewood/30 hover:bg-rosewood/30;
+    @apply btn border border-danger/30 bg-danger/10 text-danger hover:bg-danger/15;
   }
   .input {
-    @apply w-full rounded-xl bg-cocoa-850 border border-cocoa-700 px-3.5 py-2.5 text-sm text-cocoa-100 placeholder:text-cocoa-500 focus:outline-none focus:border-ember-soft/60 focus:ring-1 focus:ring-ember-soft/30 transition;
+    @apply w-full rounded-lg border border-line bg-sunken px-3.5 py-2.5 text-sm text-ink
+           placeholder:text-ink-faint focus:outline-none focus:border-accent
+           focus:ring-1 focus:ring-accent/25 transition;
   }
   .label {
-    @apply block text-xs font-medium text-cocoa-400 mb-1.5 tracking-wide;
+    @apply block text-xs font-medium text-ink-soft mb-1.5;
   }
   .card {
-    @apply rounded-2xl bg-cocoa-900 border border-cocoa-800 shadow-panel;
+    @apply rounded-xl border border-line bg-raised;
   }
   .chip {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs;
   }
   .page-title {
-    @apply font-editorial text-3xl text-cocoa-50;
+    @apply text-2xl font-semibold tracking-tight text-ink;
   }
   .marker-dot {
     @apply inline-block h-1.5 w-1.5 rounded-full;
   }
-  /* V4: 她正在输入的三点动画 */
+  /* 她正在输入的三点动画 */
   .typing-dot {
-    @apply inline-block h-1.5 w-1.5 rounded-full bg-ember-soft;
+    @apply inline-block h-1.5 w-1.5 rounded-full bg-ink-faint;
     animation: typingBounce 1.2s ease-in-out infinite;
   }
   @keyframes typingBounce {
-    0%, 60%, 100% {
-      transform: translateY(0);
-      opacity: 0.4;
-    }
-    30% {
-      transform: translateY(-4px);
-      opacity: 1;
-    }
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  /** 列表行的统一骨架 —— 会话行、联系人行、群聊行、成员行共用 */
+  .row-base {
+    @apply flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors;
+  }
+
+  /** TabBar 的一项。窄屏在底部横排, 宽屏在左侧竖排 —— 同一个组件两套 class */
+  .tab-item {
+    @apply flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors
+           md:w-full md:flex-none md:py-3;
+  }
+}
+
+@layer utilities {
+  /** 底部安全区 —— iPhone 的 Home 指示条会盖住 tab bar */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }

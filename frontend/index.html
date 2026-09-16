@@ -2,8 +2,26 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Luxera Companion · 数字伴侣</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#090b0f" media="(prefers-color-scheme: dark)" />
+    <title>聊天 · Luxera</title>
+    <script>
+      // 主题在首屏渲染前定下来 —— 晚一步就会先闪一下白底再变黑(或反过来)。
+      // 内联而不是放到 bundle 里, 因为 bundle 是异步加载的, 那段白闪正好发生在它加载完之前。
+      //
+      // 优先级: 用户存过的选择 > 系统偏好。没存过就跟随系统, 但**不写回** localStorage ——
+      // 这样用户之后改系统主题时, 界面会跟着变, 而不是被第一次的猜测钉死。
+      ;(function () {
+        try {
+          var saved = localStorage.getItem('luxera.theme')
+          var dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
+          if (dark) document.documentElement.classList.add('dark')
+        } catch (e) {
+          /* localStorage 可能被禁 —— 落到默认亮色, 不阻断渲染 */
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
