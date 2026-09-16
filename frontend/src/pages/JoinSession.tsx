@@ -53,24 +53,24 @@ export default function JoinSession() {
   }, [token, navigate, report])
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-cocoa-950 px-5">
+    <div className="flex min-h-screen items-center justify-center bg-surface px-5">
       <div className="card w-full max-w-md text-center">
-        <Ticket className="mx-auto text-ember" size={28} />
-        <h1 className="mt-3 font-editorial text-xl text-cocoa-50">加入这一场</h1>
+        <Ticket className="mx-auto text-accent" size={28} />
+        <h1 className="mt-3 text-xl text-ink">加入这一场</h1>
 
-        {busy && <p className="mt-3 text-sm text-cocoa-400">正在兑换邀请…</p>}
+        {busy && <p className="mt-3 text-sm text-ink-soft">正在兑换邀请…</p>}
 
         {error && (
           <>
-            <p className="mt-3 text-sm text-red-300">{error}</p>
-            <p className="mt-2 text-xs text-cocoa-500">
+            <p className="mt-3 text-sm text-danger">{error}</p>
+            <p className="mt-2 text-xs text-ink-faint">
               链接可能已经用过、过期, 或者被主人收回了。找发链接的人再要一张。
             </p>
           </>
         )}
 
         {joined && !error && (
-          <p className="mt-3 text-sm text-cocoa-400">
+          <p className="mt-3 text-sm text-ink-soft">
             已作为 {joined.role} 加入 —— 正在打开现场…
           </p>
         )}

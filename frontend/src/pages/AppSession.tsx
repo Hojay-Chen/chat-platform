@@ -154,8 +154,8 @@ export default function AppSession() {
   const iAmOwner = me?.role === 'OWNER'
 
   return (
-    <div className="min-h-screen bg-cocoa-950">
-      <header className="sticky top-0 z-10 border-b border-cocoa-800 bg-cocoa-950/80 backdrop-blur-md">
+    <div className="min-h-screen bg-surface">
+      <header className="sticky top-0 z-10 border-b border-line bg-surface/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-5 py-4">
           <Link
             to={`/applications/${encodeURIComponent(appId)}`}
@@ -164,10 +164,10 @@ export default function AppSession() {
           >
             <ArrowLeft size={15} />
           </Link>
-          <span className="font-editorial text-lg text-cocoa-50">
+          <span className="text-lg text-ink">
             {detail?.name || appId}
           </span>
-          <span className="text-xs text-cocoa-500">
+          <span className="text-xs text-ink-faint">
             会话 {sessionId.slice(0, 8)}… · {session?.status ?? '…'}
           </span>
           <div className="ml-auto flex items-center gap-2">
@@ -193,18 +193,18 @@ export default function AppSession() {
 
       <main className="mx-auto max-w-5xl px-5 py-8">
         {error && (
-          <div className="card mb-6 border-red-900/60 bg-red-950/30 text-sm text-red-300">
+          <div className="card mb-6 border-danger/30 bg-danger/10 text-sm text-danger">
             {error}
           </div>
         )}
 
-        {!session && !error && <p className="text-sm text-cocoa-500">正在加载会话…</p>}
+        {!session && !error && <p className="text-sm text-ink-faint">正在加载会话…</p>}
 
         {session && detail && (
           <>
             {/* 容器切换 —— 五种 Surface 在这一个页面上都能试 */}
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-cocoa-500">以…打开</span>
+              <span className="text-xs text-ink-faint">以…打开</span>
               {(['FULL_PAGE', 'EMBEDDED', 'MODAL', 'PANEL', 'INLINE'] as SurfaceType[]).map((type) => (
                 <button
                   key={type}
@@ -215,7 +215,7 @@ export default function AppSession() {
                   {type}
                 </button>
               ))}
-              <span className="ml-auto font-mono text-[11px] text-cocoa-600">
+              <span className="ml-auto font-mono text-[11px] text-ink-faint">
                 {linkFor(surface) || '—'}
               </span>
             </div>
@@ -232,9 +232,9 @@ export default function AppSession() {
 
             {/* 这一场里有谁 */}
             <section className="mt-10">
-              <h2 className="flex items-center gap-2 text-sm font-medium text-cocoa-300">
+              <h2 className="flex items-center gap-2 text-sm font-medium text-ink-soft">
                 <Users size={15} />
-                参与者 <span className="text-cocoa-500">({session.participantCount})</span>
+                参与者 <span className="text-ink-faint">({session.participantCount})</span>
               </h2>
               <div className="mt-3 space-y-2">
                 {participants.map((p) => (
@@ -243,14 +243,14 @@ export default function AppSession() {
                     className="card flex flex-wrap items-center justify-between gap-2 text-sm"
                   >
                     <div>
-                      <span className="text-cocoa-100">{p.principalId}</span>
-                      <span className="ml-2 text-xs text-cocoa-500">
+                      <span className="text-ink">{p.principalId}</span>
+                      <span className="ml-2 text-xs text-ink-faint">
                         {p.principalType} · {p.role}
                       </span>
                     </div>
                     <span
                       className={
-                        p.status === 'ACTIVE' ? 'text-xs text-emerald-400' : 'text-xs text-cocoa-500'
+                        p.status === 'ACTIVE' ? 'text-xs text-ok' : 'text-xs text-ink-faint'
                       }
                     >
                       {p.status}
@@ -263,7 +263,7 @@ export default function AppSession() {
 
             {/* 把人请进来 */}
             <section className="mt-10">
-              <h2 className="flex items-center gap-2 text-sm font-medium text-cocoa-300">
+              <h2 className="flex items-center gap-2 text-sm font-medium text-ink-soft">
                 <UserPlus size={15} />
                 邀请
               </h2>
@@ -274,18 +274,18 @@ export default function AppSession() {
                     <button type="button" onClick={invite} disabled={busy} className="btn-primary">
                       生成分享链接
                     </button>
-                    <span className="text-xs text-cocoa-500">
+                    <span className="text-xs text-ink-faint">
                       链接只表达"加入这一场"; 平台上只存它的哈希。
                     </span>
                   </div>
 
                   {minted && (
-                    <div className="card mt-3 border-ember/50">
-                      <div className="text-xs text-cocoa-500">
+                    <div className="card mt-3 border-accent/50">
+                      <div className="text-xs text-ink-faint">
                         这张票的明文<b>只出现这一次</b> —— 丢了只能重铸。
                       </div>
                       <div className="mt-2 flex items-center gap-2">
-                        <code className="flex-1 truncate rounded bg-cocoa-900 px-2 py-1 text-xs text-cocoa-200">
+                        <code className="flex-1 truncate rounded bg-raised px-2 py-1 text-xs text-ink-soft">
                           {window.location.origin}
                           {minted.joinUrl}
                         </code>
@@ -304,7 +304,7 @@ export default function AppSession() {
                           key={inv.invitationId}
                           className="card flex flex-wrap items-center justify-between gap-2 text-xs"
                         >
-                          <span className="text-cocoa-300">
+                          <span className="text-ink-soft">
                             {inv.role} · 用了 {inv.usedCount}
                             {inv.maxUses ? `/${inv.maxUses}` : ''} · {inv.status}
                             {inv.targetId ? ` · 定向 ${inv.targetId}` : ''}
@@ -322,7 +322,7 @@ export default function AppSession() {
                   )}
                 </>
               ) : (
-                <p className="mt-3 text-sm text-cocoa-500">
+                <p className="mt-3 text-sm text-ink-faint">
                   只有这一场的主人能发邀请。你可以让主人把链接发给你。
                 </p>
               )}

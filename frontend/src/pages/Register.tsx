@@ -56,13 +56,13 @@ export default function Register() {
             minLength={6}
           />
         </div>
-        {error && <p className="text-sm text-rose-soft">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <button className="btn-primary w-full" disabled={loading}>
           {loading ? '创建中…' : '创建账号'}
         </button>
-        <p className="text-center text-sm text-cocoa-400">
+        <p className="text-center text-sm text-ink-soft">
           已有账号?
-          <Link to="/login" className="ml-1 text-ember-soft hover:underline">
+          <Link to="/login" className="ml-1 text-accent hover:underline">
             登录
           </Link>
         </p>

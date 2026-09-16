@@ -67,14 +67,14 @@ export default function ApplicationDetail() {
   const canOpen = availability?.allowsNewSession ?? false
 
   return (
-    <div className="min-h-screen bg-cocoa-950">
-      <header className="sticky top-0 z-10 border-b border-cocoa-800 bg-cocoa-950/80 backdrop-blur-md">
+    <div className="min-h-screen bg-surface">
+      <header className="sticky top-0 z-10 border-b border-line bg-surface/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-4xl items-center gap-3 px-5 py-4">
           <Link to="/applications" className="btn-ghost !px-3 !py-1.5" title="回到应用市场">
             <ArrowLeft size={15} />
           </Link>
-          <Boxes className="text-ember" size={20} />
-          <span className="font-editorial text-lg text-cocoa-50">
+          <Boxes className="text-accent" size={20} />
+          <span className="text-lg text-ink">
             {detail?.name || applicationId}
           </span>
         </div>
@@ -82,17 +82,17 @@ export default function ApplicationDetail() {
 
       <main className="mx-auto max-w-4xl px-5 py-10">
         {error && (
-          <div className="card border-red-900/60 bg-red-950/30 text-sm text-red-300">{error}</div>
+          <div className="card border-danger/30 bg-danger/10 text-sm text-danger">{error}</div>
         )}
 
-        {!detail && !error && <p className="text-sm text-cocoa-500">正在加载…</p>}
+        {!detail && !error && <p className="text-sm text-ink-faint">正在加载…</p>}
 
         {detail && (
           <>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h1 className="page-title">{detail.name || detail.applicationId}</h1>
-                <p className="mt-1 text-xs text-cocoa-500">
+                <p className="mt-1 text-xs text-ink-faint">
                   {detail.applicationId} · v{detail.version}
                   {detail.category ? ` · ${detail.category}` : ''}
                 </p>
@@ -110,12 +110,12 @@ export default function ApplicationDetail() {
             </div>
 
             {detail.description && (
-              <p className="mt-4 text-sm text-cocoa-400">{detail.description}</p>
+              <p className="mt-4 text-sm text-ink-soft">{detail.description}</p>
             )}
 
             {/* 可用性 —— §4.1 那张表在这一页上的样子 */}
             <section className="mt-8">
-              <h2 className="text-sm font-medium text-cocoa-300">可用性</h2>
+              <h2 className="text-sm font-medium text-ink-soft">可用性</h2>
               <div className="card mt-3 space-y-2 text-sm">
                 <Row label="状态" value={detail.status ?? '—'} hint="十态原值, 开发者后台读的是它" />
                 <Row
@@ -128,7 +128,7 @@ export default function ApplicationDetail() {
               </div>
 
               {!canOpen && (
-                <p className="mt-3 flex items-start gap-2 text-xs text-amber-400/90">
+                <p className="mt-3 flex items-start gap-2 text-xs text-warn">
                   <ShieldAlert size={14} className="mt-0.5 shrink-0" />
                   <span>
                     这个应用当前开不了新的会话。
@@ -142,7 +142,7 @@ export default function ApplicationDetail() {
 
             {/* 界面 —— 平台只搬运 surface type / entry / 最低版本, 不解释它们 (§69) */}
             <section className="mt-8">
-              <h2 className="text-sm font-medium text-cocoa-300">界面</h2>
+              <h2 className="text-sm font-medium text-ink-soft">界面</h2>
               <div className="card mt-3 space-y-2 text-sm">
                 <Row label="模式" value={detail.ui.type} />
                 <Row label="入口" value={detail.ui.entry} />
@@ -151,19 +151,19 @@ export default function ApplicationDetail() {
                   value={detail.ui.minClientVersion ?? '不限'}
                 />
                 <div className="pt-1">
-                  <div className="text-xs text-cocoa-500">支持的容器</div>
+                  <div className="text-xs text-ink-faint">支持的容器</div>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {detail.ui.surfaces.map((s) => (
                       <span
                         key={s.type}
-                        className="rounded border border-cocoa-800 px-2 py-0.5 text-xs text-cocoa-300"
+                        className="rounded border border-line px-2 py-0.5 text-xs text-ink-soft"
                         title={s.entry}
                       >
                         {s.type}
                       </span>
                     ))}
                     {detail.ui.surfaces.length === 0 && (
-                      <span className="text-xs text-cocoa-500">没有声明任何容器</span>
+                      <span className="text-xs text-ink-faint">没有声明任何容器</span>
                     )}
                   </div>
                 </div>
@@ -172,23 +172,23 @@ export default function ApplicationDetail() {
 
             {/* 动作 —— 界面之外的那一半: 数字人用的是同一份清单 */}
             <section className="mt-8">
-              <h2 className="text-sm font-medium text-cocoa-300">
-                动作 <span className="text-cocoa-500">({actions.length})</span>
+              <h2 className="text-sm font-medium text-ink-soft">
+                动作 <span className="text-ink-faint">({actions.length})</span>
               </h2>
               <div className="mt-3 space-y-2">
                 {actions.map((spec) => (
                   <div key={spec.actionId} className="card">
-                    <div className="text-cocoa-100">{spec.actionId}</div>
-                    <div className="mt-1 text-xs text-cocoa-500">
+                    <div className="text-ink">{spec.actionId}</div>
+                    <div className="mt-1 text-xs text-ink-faint">
                       {spec.permissionLevel} · 风险 {spec.riskLevel}
                     </div>
                     {spec.description && (
-                      <p className="mt-1 text-sm text-cocoa-400">{spec.description}</p>
+                      <p className="mt-1 text-sm text-ink-soft">{spec.description}</p>
                     )}
                   </div>
                 ))}
                 {actions.length === 0 && (
-                  <p className="text-sm text-cocoa-500">这个应用没有已发布的动作。</p>
+                  <p className="text-sm text-ink-faint">这个应用没有已发布的动作。</p>
                 )}
               </div>
             </section>
@@ -202,11 +202,11 @@ export default function ApplicationDetail() {
 function Row({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <span className="text-cocoa-500">
+      <span className="text-ink-faint">
         {label}
-        {hint && <span className="ml-2 text-xs text-cocoa-600">{hint}</span>}
+        {hint && <span className="ml-2 text-xs text-ink-faint">{hint}</span>}
       </span>
-      <span className="truncate text-cocoa-200">{value}</span>
+      <span className="truncate text-ink-soft">{value}</span>
     </div>
   )
 }

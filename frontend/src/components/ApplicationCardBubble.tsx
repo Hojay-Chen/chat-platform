@@ -52,7 +52,7 @@ export default function ApplicationCardBubble({
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex animate-fadeUp justify-center py-1">
-      <div className="w-full max-w-[86%] rounded-2xl border border-cocoa-700 bg-cocoa-900/70 px-4 py-3 text-sm">
+      <div className="w-full max-w-[86%] rounded-xl border border-line bg-raised px-4 py-3 text-sm">
         {children}
       </div>
     </div>
@@ -104,19 +104,19 @@ function CardBubble({
   return (
     <Shell>
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 rounded-xl bg-ember/15 p-2 text-ember-soft">
+        <span className="mt-0.5 rounded-xl bg-accent-soft p-2 text-accent">
           <Boxes size={16} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate font-medium text-cocoa-100">{card.name ?? card.applicationId}</span>
+            <span className="truncate font-medium text-ink">{card.name ?? card.applicationId}</span>
             {card.role === 'OWNER' && (
-              <span className="shrink-0 rounded-full bg-ember/15 px-2 py-0.5 text-[10px] text-ember-soft">
+              <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] text-accent">
                 我开的
               </span>
             )}
           </div>
-          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-cocoa-500">
+          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-ink-faint">
             {card.description ?? message.content}
           </p>
           <div className="mt-2 flex items-center gap-2">
@@ -129,13 +129,13 @@ function CardBubble({
             <button
               onClick={share}
               disabled={busy}
-              className="flex items-center gap-1 rounded-lg border border-cocoa-700 px-3 py-1 text-xs text-cocoa-400 transition hover:text-ember-soft disabled:opacity-50"
+              className="flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs text-ink-soft transition hover:text-accent disabled:opacity-50"
             >
               <Ticket size={12} />
               {busy ? '分享中…' : '分享到对话'}
             </button>
           </div>
-          {error && <p className="mt-1.5 text-[11px] text-rose-soft">{error}</p>}
+          {error && <p className="mt-1.5 text-[11px] text-danger">{error}</p>}
         </div>
       </div>
     </Shell>
@@ -167,23 +167,23 @@ function InvitationBubble({ message }: { message: Message }) {
   return (
     <Shell>
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 rounded-xl bg-ember/15 p-2 text-ember-soft">
+        <span className="mt-0.5 rounded-xl bg-accent-soft p-2 text-accent">
           <Ticket size={16} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="font-medium text-cocoa-100">邀请链接</div>
-          <p className="mt-0.5 text-xs leading-relaxed text-cocoa-500">{message.content}</p>
+          <div className="font-medium text-ink">邀请链接</div>
+          <p className="mt-0.5 text-xs leading-relaxed text-ink-faint">{message.content}</p>
           <div className="mt-2 flex items-center gap-2">
             <button
               onClick={copy}
-              className="flex items-center gap-1 rounded-lg bg-ember px-3 py-1 text-xs text-cocoa-950 transition"
+              className="flex items-center gap-1 rounded-lg bg-accent px-3 py-1 text-xs text-accent-ink transition"
             >
               {copied ? <Check size={12} /> : <Copy size={12} />}
               {copied ? '已复制' : '复制链接'}
             </button>
             <a
               href={link}
-              className="rounded-lg border border-cocoa-700 px-3 py-1 text-xs text-cocoa-400 transition hover:text-ember-soft"
+              className="rounded-lg border border-line px-3 py-1 text-xs text-ink-soft transition hover:text-accent"
             >
               打开看看
             </a>

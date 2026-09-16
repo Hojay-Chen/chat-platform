@@ -108,7 +108,7 @@ export default function BoardApp({ sessionId }: EmbeddedAppProps) {
 
   if (!board) {
     return (
-      <div className="text-sm text-cocoa-400">
+      <div className="text-sm text-ink-soft">
         <p>这一场还没有棋盘。</p>
         <div className="mt-3 flex items-center gap-2">
           <button type="button" onClick={create} disabled={busy} className="btn-primary">
@@ -119,7 +119,7 @@ export default function BoardApp({ sessionId }: EmbeddedAppProps) {
             再读一次
           </button>
         </div>
-        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+        {error && <p className="mt-2 text-xs text-danger">{error}</p>}
       </div>
     )
   }
@@ -128,16 +128,16 @@ export default function BoardApp({ sessionId }: EmbeddedAppProps) {
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-cocoa-400">
+      <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-ink-soft">
         <span>
-          轮到 <span className="text-cocoa-100">{turn ? String(turn) : '—'}</span>
+          轮到 <span className="text-ink">{turn ? String(turn) : '—'}</span>
         </span>
         {winner ? (
-          <span className="text-ember">
+          <span className="text-accent">
             {winner === 'DRAW' ? '平局' : `${String(winner)} 胜`}
           </span>
         ) : null}
-        <span className="text-cocoa-600">version {resource?.version}</span>
+        <span className="text-ink-faint">version {resource?.version}</span>
         <button type="button" onClick={load} disabled={busy} className="btn-ghost !px-2 !py-0.5">
           <RefreshCw size={12} />
           刷新
@@ -145,11 +145,11 @@ export default function BoardApp({ sessionId }: EmbeddedAppProps) {
       </div>
 
       {error && (
-        <div className="mb-2 rounded border border-red-900/60 bg-red-950/30 px-3 py-1.5 text-xs text-red-300">
+        <div className="mb-2 rounded border border-danger/30 bg-danger/10 px-3 py-1.5 text-xs text-danger">
           {error}
         </div>
       )}
-      {notice && !error && <div className="mb-2 text-xs text-cocoa-400">{notice}</div>}
+      {notice && !error && <div className="mb-2 text-xs text-ink-soft">{notice}</div>}
 
       <div
         className="grid w-fit gap-0.5"
@@ -161,7 +161,7 @@ export default function BoardApp({ sessionId }: EmbeddedAppProps) {
             type="button"
             disabled={busy || cell !== null}
             onClick={() => move(index)}
-            className={`${cellSize} rounded-sm bg-cocoa-900 text-cocoa-100 disabled:opacity-50`}
+            className={`${cellSize} rounded-sm bg-sunken text-ink disabled:opacity-50`}
           >
             {cell === null || cell === undefined ? '' : String(cell)}
           </button>

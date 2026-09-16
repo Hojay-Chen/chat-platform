@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Sparkles } from 'lucide-react'
 import { api } from '@/api/client'
+import { Avatar } from '@/components/im/Avatar'
 import { useCompanionStore } from '@/stores/companion'
-import CompanionAvatar from '@/components/CompanionAvatar'
 import { RELATIONSHIP_TYPES, relationshipTypeZh, type RelationshipTypeValue } from '@/lib/relationships'
 import type { Companion, Persona } from '@/types'
 
@@ -95,24 +95,24 @@ export default function CompanionCreate() {
   const traits = persona?.personality?.traits || {}
 
   return (
-    <div className="min-h-screen bg-cocoa-950">
-      <header className="border-b border-cocoa-800">
+    <div className="min-h-screen bg-surface">
+      <header className="border-b border-line">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-5 py-4">
           <button onClick={() => navigate('/contacts')} className="btn-ghost !px-3 !py-1.5">
             <ArrowLeft size={15} />
           </button>
-          <span className="font-editorial text-lg text-cocoa-50">创建新伴侣</span>
+          <span className="text-lg text-ink">创建新伴侣</span>
         </div>
       </header>
 
       <main className="mx-auto max-w-3xl px-5 py-8">
-        {error && <p className="mb-4 rounded-xl border border-rosewood/30 bg-rosewood/10 px-4 py-2 text-sm text-rose-soft">{error}</p>}
+        {error && <p className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-2 text-sm text-danger">{error}</p>}
 
         {/* Step 1: 描述 */}
         <section className="card p-6">
-          <div className="mb-1 text-xs uppercase tracking-widest text-ember-soft">STEP 1</div>
-          <h2 className="font-editorial text-2xl text-cocoa-50">用你的话描述她</h2>
-          <p className="mt-1 text-sm text-cocoa-400">
+          <div className="mb-1 text-xs uppercase tracking-widest text-accent">STEP 1</div>
+          <h2 className="text-2xl text-ink">用你的话描述她</h2>
+          <p className="mt-1 text-sm text-ink-soft">
             性格、说话方式、你们的关系、她想要怎样的相处。想到什么说什么,她会从你的描述里诞生。
           </p>
           <textarea
@@ -130,9 +130,9 @@ export default function CompanionCreate() {
         {/* Step 1.5: 你和她是什么关系 (§七: 真实关系状态, 不是 Prompt) */}
         {persona && (
           <section className="card mt-6 p-6 animate-fadeUp">
-            <div className="mb-1 text-xs uppercase tracking-widest text-ember-soft">你们的关系</div>
-            <h2 className="font-editorial text-xl text-cocoa-50">你和她是什么关系?</h2>
-            <p className="mt-1 text-sm text-cocoa-400">
+            <div className="mb-1 text-xs uppercase tracking-widest text-accent">你们的关系</div>
+            <h2 className="text-xl text-ink">你和她是什么关系?</h2>
+            <p className="mt-1 text-sm text-ink-soft">
               这会成为她世界里真实的关系状态:她对你的熟悉、信任、亲昵都会从它开始。
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -142,14 +142,14 @@ export default function CompanionCreate() {
                   onClick={() => setRelationshipType(t.value as RelationshipTypeValue)}
                   className={`rounded-xl border px-3 py-2.5 text-left transition ${
                     relationshipType === t.value
-                      ? 'border-ember-soft/60 bg-ember/15'
-                      : 'border-cocoa-700 bg-cocoa-850 hover:border-cocoa-500'
+                      ? 'border-accent/60 bg-accent-soft'
+                      : 'border-line bg-sunken hover:border-line-strong'
                   }`}
                 >
-                  <div className={`text-sm ${relationshipType === t.value ? 'text-ember-soft' : 'text-cocoa-100'}`}>
+                  <div className={`text-sm ${relationshipType === t.value ? 'text-accent' : 'text-ink'}`}>
                     {t.label}
                   </div>
-                  <div className="mt-0.5 text-[11px] leading-snug text-cocoa-500">{t.desc}</div>
+                  <div className="mt-0.5 text-[11px] leading-snug text-ink-faint">{t.desc}</div>
                 </button>
               ))}
             </div>
@@ -159,12 +159,12 @@ export default function CompanionCreate() {
         {/* Step 2: 预览 */}
         {persona && (
           <section className="card mt-6 p-6 animate-fadeUp">
-            <div className="mb-1 text-xs uppercase tracking-widest text-ember-soft">STEP 2 · 预览</div>
+            <div className="mb-1 text-xs uppercase tracking-widest text-accent">STEP 2 · 预览</div>
             <div className="mt-3 flex items-center gap-4">
-              <CompanionAvatar name={name} gender={persona.identity?.gender} size={56} />
+              <Avatar name={name} kind="agent" size={56} />
               <div>
-                <h3 className="font-editorial text-2xl text-cocoa-50">{name}</h3>
-                <p className="text-sm text-cocoa-400">
+                <h3 className="text-2xl text-ink">{name}</h3>
+                <p className="text-sm text-ink-soft">
                   {persona.identity?.gender === 'male' ? '男性' : '女性'} ·{' '}
                   {relationshipType
                     ? relationshipTypeZh(relationshipType)
@@ -176,33 +176,33 @@ export default function CompanionCreate() {
             </div>
 
             {persona.personality?.summary && (
-              <p className="mt-4 text-sm leading-relaxed text-cocoa-200">{persona.personality.summary}</p>
+              <p className="mt-4 text-sm leading-relaxed text-ink-soft">{persona.personality.summary}</p>
             )}
 
             {Object.keys(traits).length > 0 && (
               <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2">
                 {Object.entries(traits).map(([key, val]) => (
                   <div key={key} className="flex items-center gap-2 text-xs">
-                    <span className="w-8 text-cocoa-400">{TRAIT_ZH[key] || key}</span>
-                    <div className="h-1 flex-1 overflow-hidden rounded-full bg-cocoa-800">
+                    <span className="w-8 text-ink-soft">{TRAIT_ZH[key] || key}</span>
+                    <div className="h-1 flex-1 overflow-hidden rounded-full bg-sunken">
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-ember-deep to-ember-soft"
+                        className="h-full rounded-full bg-accent"
                         style={{ width: `${Math.round((val || 0) * 100)}%` }}
                       />
                     </div>
-                    <span className="w-7 text-right text-cocoa-500">{Math.round((val || 0) * 100)}</span>
+                    <span className="w-7 text-right text-ink-faint">{Math.round((val || 0) * 100)}</span>
                   </div>
                 ))}
               </div>
             )}
 
             {persona.communication?.style && (
-              <p className="mt-4 text-sm text-cocoa-400">说话方式:{persona.communication.style}</p>
+              <p className="mt-4 text-sm text-ink-soft">说话方式:{persona.communication.style}</p>
             )}
 
             {/* 场景预览 */}
-            <div className="mt-6 rounded-2xl border border-cocoa-700 bg-cocoa-850 p-4">
-              <p className="text-xs text-cocoa-500">场景:{scenario}</p>
+            <div className="mt-6 rounded-xl border border-line bg-sunken p-4">
+              <p className="text-xs text-ink-faint">场景:{scenario}</p>
               <div className="mt-3 flex gap-2 flex-wrap">
                 {DEFAULT_SCENARIOS.map((s) => (
                   <button
@@ -213,8 +213,8 @@ export default function CompanionCreate() {
                     }}
                     className={`chip border transition ${
                       scenario === s.text
-                        ? 'border-ember-soft/50 bg-ember/15 text-ember-soft'
-                        : 'border-cocoa-700 text-cocoa-400 hover:border-cocoa-500'
+                        ? 'border-accent/50 bg-accent-soft text-accent'
+                        : 'border-line text-ink-soft hover:border-line-strong'
                     }`}
                   >
                     {s.label}
@@ -225,7 +225,7 @@ export default function CompanionCreate() {
                 {previewing ? '正在想…' : '换一种回应看看'}
               </button>
               {preview && (
-                <div className="mt-4 rounded-2xl border border-cocoa-700 bg-cocoa-800 px-4 py-3 text-sm text-cocoa-100 animate-fadeUp">
+                <div className="mt-4 rounded-xl border border-line bg-sunken px-4 py-3 text-sm text-ink animate-fadeUp">
                   {preview}
                 </div>
               )}

@@ -42,7 +42,7 @@ export default function Login() {
             required
           />
         </div>
-        {error && <p className="text-sm text-rose-soft">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <button className="btn-primary w-full" disabled={loading}>
           {loading ? '登录中…' : '登录'}
         </button>

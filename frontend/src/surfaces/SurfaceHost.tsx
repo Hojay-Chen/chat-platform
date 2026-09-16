@@ -91,7 +91,7 @@ export default function SurfaceHost({
       dataEntry={entry}
     >
       {plan.fallback && (
-        <p className="mb-2 text-xs text-cocoa-500" data-testid="surface-fallback-note">
+        <p className="mb-2 text-xs text-ink-faint" data-testid="surface-fallback-note">
           这个应用没有为 {plan.requested} 提供入口, 已按 {plan.surface} 打开。
         </p>
       )}
@@ -139,7 +139,7 @@ export default function SurfaceHost({
             data-testid="surface-remote-frame"
             title={title ?? applicationId}
             src={entry}
-            className="h-full min-h-[24rem] w-full rounded border border-cocoa-800 bg-cocoa-950"
+            className="h-full min-h-[24rem] w-full rounded border border-line bg-surface"
             // 第三方页面拿不到本页的 window 引用, 也带不走 referrer —— 它只该通过
             // 平台的动作接口做事, 而不是从 DOM 里够到什么。
             sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
@@ -155,7 +155,7 @@ export default function SurfaceHost({
               title="这是一个原生应用"
               body={`网页版打不开 ${applicationId} 的原生界面。在支持的客户端里用这个入口: ${entry}`}
             />
-            <p className="mt-2 flex items-center gap-1 text-xs text-cocoa-500">
+            <p className="mt-2 flex items-center gap-1 text-xs text-ink-faint">
               <MonitorSmartphone size={13} />
               {entry}
             </p>
@@ -216,7 +216,7 @@ function Frame({
           {...attrs}
           className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 ${className ?? ''}`}
         >
-          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-cocoa-800 bg-cocoa-950 shadow-2xl">
+          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-2xl">
             <Chrome title={title} onClose={onClose} closeLabel="关闭" />
             <div className="overflow-auto p-4">{children}</div>
           </div>
@@ -227,7 +227,7 @@ function Frame({
       return (
         <div
           {...attrs}
-          className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-cocoa-800 bg-cocoa-950 shadow-2xl ${className ?? ''}`}
+          className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-line bg-surface shadow-2xl ${className ?? ''}`}
         >
           <Chrome title={title} onClose={onClose} closeLabel="收起" />
           <div className="overflow-auto p-4">{children}</div>
@@ -238,7 +238,7 @@ function Frame({
       // 嵌在别人的页面里 —— 所以**没有**关闭按钮, 也**没有**标题栏:
       // 这块地方的主人不是我, 在我这块里放一个"关掉整个面板"的按钮是越权。
       return (
-        <div {...attrs} className={`rounded-lg border border-cocoa-800 bg-cocoa-950/60 p-3 ${className ?? ''}`}>
+        <div {...attrs} className={`rounded-lg border border-line bg-surface/60 p-3 ${className ?? ''}`}>
           {children}
         </div>
       )
@@ -247,7 +247,7 @@ function Frame({
       return (
         <div
           {...attrs}
-          className={`flex items-center gap-3 rounded border border-cocoa-800 bg-cocoa-950/60 px-3 py-2 ${className ?? ''}`}
+          className={`flex items-center gap-3 rounded border border-line bg-surface/60 px-3 py-2 ${className ?? ''}`}
         >
           <div className="min-w-0 flex-1 truncate">{children}</div>
           {onExpand && (
@@ -267,7 +267,7 @@ function Frame({
     case 'FULL_PAGE':
     default:
       return (
-        <div {...attrs} className={`flex min-h-screen flex-col bg-cocoa-950 ${className ?? ''}`}>
+        <div {...attrs} className={`flex min-h-screen flex-col bg-surface ${className ?? ''}`}>
           {title || onClose ? <Chrome title={title} onClose={onClose} closeLabel="返回" /> : null}
           <div className="flex-1 p-4">{children}</div>
         </div>
@@ -285,8 +285,8 @@ function Chrome({
   closeLabel: string
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-cocoa-800 px-4 py-3">
-      <span className="truncate text-sm text-cocoa-200">{title ?? ''}</span>
+    <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+      <span className="truncate text-sm text-ink">{title ?? ''}</span>
       {onClose && (
         <button
           type="button"
@@ -304,8 +304,8 @@ function Chrome({
 
 function Notice({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded border border-cocoa-800 bg-cocoa-900/40 p-4 text-sm text-cocoa-400">
-      <div className="flex items-center gap-2 text-cocoa-200">
+    <div className="rounded border border-line bg-sunken/40 p-4 text-sm text-ink-soft">
+      <div className="flex items-center gap-2 text-ink">
         <ExternalLink size={14} />
         {title}
       </div>

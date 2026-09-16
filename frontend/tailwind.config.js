@@ -7,9 +7,15 @@
  * 都对, 于是没有 `bg-white dark:bg-gray-900` 这种成对维护的负担 —— 那正是"简约"在
  * 代码侧的兑现。变量的定义在 `src/index.css` 的 `:root` / `.dark` 里。
  *
- * 旧的暖棕调色板(cocoa/ember/rosewood/jade)仍在, 但**只是过渡**: 现存 17 个文件里
- * 约 430 处裸色号还没改完。全部迁到语义名之后它们会被整体删除 —— 留着就等于留了
- * 一条能悄悄退回旧视觉的路。**新代码一律用语义名。**
+ * 旧的暖棕调色板(cocoa/ember/rosewood/jade)与 `font-editorial` 已在第 8 步**整体删除**。
+ * 删掉而不只是"不再使用"是刻意的: 留着就等于留了一条能悄悄退回旧视觉的路, 而那条路
+ * 的尽头是"暧昧"—— 用户对这个词的原话是"颜色设计的太暧昧了"。
+ *
+ * 同样删掉的还有 `shadow-glow`(那个暖金 `rgba(233,180,103,.18)` 正是暧昧的签名)与
+ * 处处在用的 `shadow-panel`。全局只留 `shadow-pop` 一个阴影, 且只给浮层 ——
+ * 页面上的卡片一律靠 1px 边框区分, 不靠投影。
+ *
+ * `grep -rn "cocoa-\|ember-\|rosewood\|font-editorial" src/` 必须零命中, 这是验收项。
  */
 module.exports = {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
@@ -55,15 +61,6 @@ module.exports = {
         'bubble-out': 'rgb(var(--bubble-out) / <alpha-value>)',
         'bubble-out-ink': 'rgb(var(--bubble-out-ink) / <alpha-value>)',
 
-        // ── 过渡期遗留(第 8 步全部迁走后删除) ──────
-        cocoa: {
-          950: '#14100e', 900: '#1a1512', 850: '#201a16', 800: '#272019', 700: '#332a21',
-          600: '#473a2d', 500: '#6b5844', 400: '#9a8168', 300: '#c3ac90', 200: '#dfd0ba',
-          100: '#efe5d6', 50: '#f9f4ec',
-        },
-        ember: { DEFAULT: '#d97757', soft: '#e8b467', deep: '#b45a3f', pale: '#f4d7c4' },
-        rosewood: { DEFAULT: '#a85d6f', soft: '#c98a97' },
-        jade: { DEFAULT: '#5f9e7d', soft: '#8ec2a6' },
       },
       fontFamily: {
         sans: ['Inter', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', '-apple-system', 'sans-serif'],
