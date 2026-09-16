@@ -72,7 +72,7 @@ public class MessageCoreService {
     public SendResult send(String userId, String companionId, String conversationId,
                            List<SendItem> items) {
         companionDirectory.requireOwned(userId, companionId);
-        Conversation conv = conversationService.requireOwned(userId, conversationId);
+        Conversation conv = conversationService.requireVisible(userId, conversationId);
         if (!conv.getCompanionId().equals(companionId)) {
             throw new IllegalArgumentException("会话与伴侣不匹配");
         }
@@ -99,8 +99,9 @@ public class MessageCoreService {
             }
 
             // 同步落库(消息立即成为事实; 感知是对方的事, 由对方在收到通知后自己做)
-            Message m = conversationService.addMessage(conversationId, "user", content,
-                    item.getClientMessageId());
+            // senderId 显式传 userId: 真人消息的作者不推导 —— 群聊里"用户"不再是一个人
+            Message m = conversationService.addMessage(conversationId, "user", userId, content,
+                    null, null, null, false, null, null, null, item.getClientMessageId());
             persisted.add(m);
             newMessages.add(m);
 

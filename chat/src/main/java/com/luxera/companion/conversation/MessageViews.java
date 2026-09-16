@@ -24,6 +24,7 @@ public final class MessageViews {
                 .conversationId(m.getConversationId())
                 .clientMessageId(m.getClientMessageId())
                 .senderType(m.getSenderType())
+                .senderId(m.getSenderId())
                 .content(m.getContent())
                 .intent(m.getIntent())
                 .emotion(m.getEmotion())

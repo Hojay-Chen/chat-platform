@@ -34,6 +34,19 @@ public class MessageView {
     private final String clientMessageId;
     /** {@code user | companion | system} */
     private final String senderType;
+    /**
+     * 这条消息**是谁**发的 —— {@code senderType} 只说"以什么身份", 这个说"哪一个"。
+     *
+     * <p>一对一里 {@code senderType} 就够用了, 所以这一列到 2026-09 才补上。群聊里它不够:
+     * 三个成员都是 {@code user}, 光看 {@code senderType} 分不出是谁在说话。
+     *
+     * <p>{@code user} → users.id; {@code companion} → 该 agent 在聊天平台的账号 id
+     * (三期之前是 companionId); {@code system} → 为空。
+     *
+     * <p><b>可以为 null</b>: 加列之前的历史消息没有这个值, 而 {@code ddl-auto: update}
+     * 既不能给非空表加 NOT NULL 列, 也补不出老数据的值。消费方必须容忍 null。
+     */
+    private final String senderId;
     private final String content;
     private final String intent;
     private final String emotion;

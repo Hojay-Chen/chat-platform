@@ -39,6 +39,19 @@ public class Message {
     @Column(name = "sender_type", nullable = false, length = 16)
     private String senderType;
 
+    /**
+     * 这条消息**是谁**发的。{@code senderType} 只说身份类别, 这个说具体是哪一个 ——
+     * 群聊里三个成员都是 {@code user}, 没有这一列就分不出是谁在说话。
+     *
+     * <p>user → users.id; companion → 该 agent 的聊天平台账号 id(三期之前是 companionId);
+     * system → 空。
+     *
+     * <p><b>必须 nullable</b>: 本列是加出来的, 而 Hibernate {@code ddl-auto: update}
+     * 无法给一张非空表加 NOT NULL 列, 也补不出历史行的值。老数据这一列永远是 null。
+     */
+    @Column(name = "sender_id", length = 36)
+    private String senderId;
+
     @Column(nullable = false, columnDefinition = "text")
     private String content;
 

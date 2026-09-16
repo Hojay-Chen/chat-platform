@@ -64,7 +64,7 @@ public class ChatController {
     public List<Message> messages(@PathVariable String companionId, @PathVariable String conversationId) {
         String userId = currentUser.requireUserId();
         companionDirectory.requireOwned(userId, companionId);
-        conversationService.requireOwned(userId, conversationId);
+        conversationService.requireVisible(userId, conversationId);
         return conversationService.messages(conversationId);
     }
 
@@ -74,7 +74,7 @@ public class ChatController {
                                                       @PathVariable String conversationId) {
         String userId = currentUser.requireUserId();
         companionDirectory.requireOwned(userId, companionId);
-        conversationService.requireOwned(userId, conversationId);
+        conversationService.requireVisible(userId, conversationId);
         return participantService.participants(conversationId);
     }
 

@@ -170,7 +170,7 @@ public class ConversationApplicationService {
      */
     private void requireConversation(String userId, String companionId, String conversationId) {
         companionDirectory.requireOwned(userId, companionId);
-        Conversation conversation = conversations.requireOwned(userId, conversationId);
+        Conversation conversation = conversations.requireVisible(userId, conversationId);
         if (!conversation.getCompanionId().equals(companionId)) {
             throw new IllegalArgumentException("会话与伴侣不匹配");
         }
