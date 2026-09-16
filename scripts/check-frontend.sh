@@ -151,6 +151,35 @@ else
   ok "/conversations/first 已到 8091 (实得 $FIRST, 非 404)"
 fi
 
+# 4e. ★ 第 4a 步立的新面: /api/conversations —— 只按 conversationId 寻址。
+#
+#     为什么它不是"又一个列表接口": 8081 有一个兜底代理
+#     `@RequestMapping({"/api/companions", "/api/companions/**"})`(F6),
+#     **任何**挂在 /api/companions/** 下的新端点都会被它吞掉。所以新面必须在顶层,
+#     这一段断言的就是"它真的在顶层(即没有被代理吞掉)"。
+#     会话列表同时是「聊天」tab 唯一的读路径 —— 它坏了, 那个 tab 就是空白。
+CONVS=$(curl -s -m 15 "$BASE/api/conversations" -H "Authorization: Bearer $TOKEN")
+CN=$(echo "$CONVS" | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))' 2>/dev/null || echo "-1")
+[ "${CN:-0}" -ge 1 ] && ok "GET /api/conversations → 200, $CN 段会话" || fail "会话列表异常: ${CONVS:0:120}"
+echo "$CONVS" | grep -q "$CID" && ok "刚建的伴侣出现在会话列表里 (peerId=$CID)" || fail "新建的会话没进列表"
+
+# 列表项的字段: 后端此刻给的是 peerId/peerName, 而**契约**要的是二期就需要的
+# unreadCount / pinned / muted。前端的翻译层(api/conversations.ts)把前者拼成
+# `peer: PeerRef`。这里断言的是后端那一半 —— 翻译层由 vitest 守。
+echo "$CONVS" | python3 -c '
+import sys, json
+row = json.load(sys.stdin)[0]
+need = ["id", "peerId", "peerName", "title", "unreadCount", "pinned", "muted"]
+miss = [k for k in need if k not in row]
+print("OK" if not miss else "MISS:" + ",".join(miss))' | grep -q "^OK$" \
+  && ok "列表项带二期形状 (peerId/peerName/unreadCount/pinned/muted)" \
+  || fail "会话列表项缺字段 —— 前端的 ConversationSummary 接不上"
+
+# 4f. ★ 老别名不能坏。8091 侧此刻还在用 /api/companions/{c}/conversations/... 这一族,
+#     它们与 /api/conversations 是同一份数据的两个面 —— 别名坏了, 仓 2 会先炸。
+OLD=$(code "/api/companions/$CID/conversations" GET 15)
+[ "$OLD" = "200" ] && ok "老别名 /api/companions/{c}/conversations 仍 200" || fail "老别名坏了: 实得 $OLD"
+
 # ── F5 vite 代理单目标 ──
 note "F5: vite 单目标(/api → 8081); /agent/api 不再被代理"
 ( cd "$ROOT/frontend" && exec npm run dev ) > "$TMP/vite.log" 2>&1 &

@@ -4,6 +4,7 @@
 #       / Person+多维关系 / 会话参与者 / SSE 游标重放 / 行为引擎 / 会话线程 / 反 AI 评估
 #       / 提醒 REST 契约(LAP v1 R5: 数据归应用, 接口未变; R8: 旧表已 DROP)
 # 用法: BASE=http://127.0.0.1:8081 bash scripts/check.sh
+#       (测试7 的 BehaviorEngine 在 AGENT_BASE, 默认 http://127.0.0.1:8091 —— 见那里的注释)
 set -euo pipefail
 BASE="${BASE:-http://127.0.0.1:8081}"
 PY=python3
@@ -116,7 +117,13 @@ REPLAY=$(curl -s -N -m 5 -X GET "$BASE/api/companions/$CID/events" \
 
 # ── 测试 7: 行为引擎(中央行为选择器) ──
 note "测试7: BehaviorEngine"
-BEH=$(curl -s -X POST "$BASE/api/admin/behavior/run/$CID" -H "Authorization: Bearer $TOKEN" 2>/dev/null || echo '{}')
+# G1 之后这个端点在 **8091** (行为引擎属认知链, 归 Agent 平台), 不在 8081。
+# 这里曾经打 $BASE 而一直 404 —— 一条永远红的断言等于没有断言, 所以它被修好而不是被删掉:
+# 认知链跑不跑得起来, 是这个平台最该被守住的一件事。
+# 它是这条脚本里唯一一个不经 8081 的调用, 因为**验收脚本不是浏览器** —— 浏览器那条
+# 单入口约束由 check-frontend.sh 的 G8 守(那里断言 /agent/api 不是 API 路径)。
+AGENT_BASE="${AGENT_BASE:-http://127.0.0.1:8091}"
+BEH=$(curl -s -X POST "$AGENT_BASE/api/admin/behavior/run/$CID" -H "Authorization: Bearer $TOKEN" 2>/dev/null || echo '{}')
 ACTION=$(echo "$BEH" | $PY -c "import sys,json;print(json.load(sys.stdin).get('action',''))" 2>/dev/null || echo "")
 [ -n "$ACTION" ] && ok "行为评估产出候选: $ACTION" || fail "行为评估失败: ${BEH:0:100}"
 
