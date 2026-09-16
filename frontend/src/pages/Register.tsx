@@ -16,7 +16,7 @@ export default function Register() {
     setError('')
     try {
       await register(form)
-      navigate('/companions', { replace: true })
+      navigate('/chat', { replace: true })
     } catch (err) {
       setError((err as Error).message)
     } finally {

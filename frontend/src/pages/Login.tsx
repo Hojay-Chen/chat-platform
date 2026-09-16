@@ -17,7 +17,7 @@ export default function Login() {
     setError('')
     try {
       await login(username, password)
-      navigate('/companions', { replace: true })
+      navigate('/chat', { replace: true })
     } catch (err) {
       setError((err as Error).message)
     } finally {
