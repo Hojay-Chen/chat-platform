@@ -165,12 +165,16 @@ export const chatApplications = {
    *
    * 返回里的 `token` 只出现这一次(库里只存哈希), 同时平台已经落了一条带链接的消息 ——
    * 也就是说, 即使用户此刻没复制, 链接也没有丢: 它在对话里。
+   *
+   * `note` 是分享的人写的那句附言(§10 的「来玩吗?」)。服务端会把它裁一遍再拼进那条消息的
+   * 正文(见 `ConversationApplicationService.share`)。**裁剪在服务端, 不在这里** —— 这个
+   * 函数是给界面用的, 而调这个端点的不止界面。
    */
   share: (
     companionId: string,
     conversationId: string,
     sessionId: string,
-    options?: { role?: string; maxUses?: number },
+    options?: { role?: string; maxUses?: number; note?: string },
   ) =>
     send<SharedInvitation>(
       'POST',
@@ -193,7 +197,26 @@ export function cardOf(metadata: Record<string, unknown> | null | undefined) {
   }
 }
 
-/** 邀请消息的 `metadata`。`joinUrl` 是点得开的那一个, 其余是给人看的。 */
+/**
+ * 邀请消息的 `metadata`。`joinUrl` 是点得开的那一个, 其余是给人看的。
+ *
+ * <h2>为什么这里多了应用名与描述</h2>
+ *
+ * 一张给收件人看的卡片要回答三个问题: 是什么应用、谁邀请我、点了去哪。第一个问题以前只能
+ * 靠 `content` 那句话去猜, 而"从一句中文里正则出一个应用名"是那种一旦被翻译成别的语言就
+ * 静默失效的做法。服务端现在把 `applicationId` / `name` / `description` 一起写进 metadata
+ * —— 它们**刻意不进 content**: content 是给认不出这个 messageKind 的旧客户端的降级路径,
+ * 而卡片是正常路径, 两条路要满足的约束本来就不同。
+ *
+ * <p>拿不到应用信息时这几个字段是 null(服务端那次额外查询失败不影响分享) —— 所以它们的
+ * 缺失是**正常的**, 卡片要能只靠一个链接就成立。
+ *
+ * <h2>这里**没有** `coverUrl`</h2>
+ *
+ * 不是漏了。第三方应用可以在分享请求里带封面地址, 但那个地址不会进这条消息 —— 见
+ * `application-host/share.ts` 的 `normalizeShare`。收件人看到的那张封面由客户端按应用名
+ * 画出来(`coverOf`), 对任何应用都成立, 且不需要信任任何人。
+ */
 export function invitationOf(metadata: Record<string, unknown> | null | undefined) {
   const m = metadata ?? {}
   return {
@@ -202,6 +225,11 @@ export function invitationOf(metadata: Record<string, unknown> | null | undefine
     joinUrl: str(m.joinUrl),
     role: str(m.role),
     maxUses: typeof m.maxUses === 'number' ? m.maxUses : null,
+    /** 分享的人写的那句附言。为空 = 他没写, 不是"他没写但平台编了一句"。 */
+    note: str(m.note),
+    applicationId: str(m.applicationId),
+    name: str(m.name),
+    description: str(m.description),
   }
 }
 

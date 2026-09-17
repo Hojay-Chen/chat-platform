@@ -96,6 +96,10 @@ public class ConversationApplicationController {
      * <p>{@code token} 在这个响应里<em>非空</em>, 此后永远为空(见 {@code ApplicationInvitation})。
      * 唯一能铸票的人是会话主人 —— 那条判据在应用平台里, 不在这里: 聊天侧不知道"谁是主人",
      * 它也没必要知道。
+     *
+     * <p>{@code note} 是分享的人写的那句附言(§10 的「来玩吗?」)。它可以为空 —— 老客户端
+     * (以及 {@code CardBubble} 上那个不弹面板的"分享到对话")不带这个字段, 而那时这条分享
+     * 与加这个字段之前<b>逐字节相同</b>。
      */
     @PostMapping("/{sessionId}/share")
     public ResponseEntity<Map<String, Object>> share(@PathVariable String companionId,
@@ -105,7 +109,8 @@ public class ConversationApplicationController {
         ConversationApplicationService.ShareResult result = applications.share(
                 currentUser.requireUserId(), companionId, conversationId, sessionId,
                 request == null ? null : request.role(),
-                request == null ? null : request.maxUses());
+                request == null ? null : request.maxUses(),
+                request == null ? null : request.note());
         ApplicationInvitation invitation = result.invitation();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("invitationId", invitation.invitationId());
@@ -118,6 +123,12 @@ public class ConversationApplicationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 
-    /** {@code role} 空 → MEMBER; {@code maxUses} 空 → 不限次数。两个都只能由主人定。 */
-    public record ShareRequest(String role, Integer maxUses) {}
+    /**
+     * {@code role} 空 → MEMBER; {@code maxUses} 空 → 不限次数。两个都只能由主人定。
+     *
+     * <p>{@code note} 是唯一一个由用户随手写的字段, 所以它也是唯一一个需要裁剪的 ——
+     * 裁剪在 {@code ConversationApplicationService.sanitizeNote} 里, 因为<b>边界属于服务,
+     * 不属于控制器</b>: 这个端点今天是唯一的入口, 但它不是唯一可能的入口。
+     */
+    public record ShareRequest(String role, Integer maxUses, String note) {}
 }

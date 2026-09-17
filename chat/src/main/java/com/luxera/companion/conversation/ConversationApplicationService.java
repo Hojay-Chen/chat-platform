@@ -61,6 +61,15 @@ public class ConversationApplicationService {
     /** 一条"点这里加入这一场"的消息。{@code metadata.joinUrl} 是它的全部内容。 */
     public static final String KIND_APPLICATION_INVITATION = "APPLICATION_INVITATION";
 
+    /**
+     * 附言的长度上限。
+     *
+     * <p>它不是"防攻击" —— 一条 200 字的附言与一条两万字的附言对服务器没有区别。它是
+     * <b>版面</b>的约束: 这个消息最终会以一张卡片的样子出现在别人的会话列表与聊天室里,
+     * 而一个能撑破卡片的附言会把那条消息变成一堵墙, 让收件人连"进入游戏"那个按钮都找不到。
+     */
+    static final int MAX_NOTE = 200;
+
     /** 平台通告的发送者。不是 "user"(没人说过这句话), 也不是 "companion"(不是它说的)。 */
     private static final String SENDER_SYSTEM = "system";
 
@@ -145,17 +154,79 @@ public class ConversationApplicationService {
     @Transactional
     public ShareResult share(String userId, String companionId, String conversationId,
                              String sessionId, String role, Integer maxUses) {
+        return share(userId, companionId, conversationId, sessionId, role, maxUses, null);
+    }
+
+    /**
+     * 同上, 但允许分享的人写一句<b>附言</b>(§10 那个「来玩吗?」输入框)。
+     *
+     * <h2>附言为什么不是一个新字段, 而是落在 content 里</h2>
+     *
+     * 认不出 {@code APPLICATION_INVITATION} 的客户端会把 {@code content} 当普通文本显示 ——
+     * 那条降级路径正是这类消息敢用"卡片"形态的前提({@link #KIND_APPLICATION_CARD} 那里
+     * 同一句话)。所以附言必须进 {@code content}, 否则在旧客户端上它<b>整条消失</b>: 用户写的
+     * 那句话, 只在装了新版的设备上存在。
+     *
+     * <p>它同时也在 {@code metadata.note} 里 —— 给渲染卡片的客户端一个**能分开排版**的副本。
+     * 两份不是冗余: 一份是降级路径, 一份是正常路径, 而它们要满足的约束本来就不同。
+     *
+     * <p>链接永远在最后一行: 附言是用户写的, 链接是平台加的, 而"这行字是不是平台加的"
+     * 不该取决于用户写了什么。
+     */
+    @Transactional
+    public ShareResult share(String userId, String companionId, String conversationId,
+                             String sessionId, String role, Integer maxUses, String note) {
         requireConversation(userId, companionId, conversationId);
         InvocationContext context = identity(userId);
         ApplicationInvitation invitation = catalogue.invite(context, sessionId, role, maxUses);
+        String clean = sanitizeNote(note);
+
+        String invite = invitationText(context, invitation);
+        String content = clean.isEmpty() ? invite : clean + "\n" + invite;
 
         Message message = conversations.addMessage(conversationId, SENDER_SYSTEM,
-                invitationText(context, invitation), KIND_APPLICATION_INVITATION,
-                invitationMetadata(invitation));
+                content, KIND_APPLICATION_INVITATION,
+                invitationMetadata(context, invitation, clean));
 
-        log.info("[ConversationApplication] {} 把会话 {} 的票 {} 分享到对话 {}",
-                userId, sessionId, invitation.invitationId(), conversationId);
+        log.info("[ConversationApplication] {} 把会话 {} 的票 {} 分享到对话 {}{}",
+                userId, sessionId, invitation.invitationId(), conversationId,
+                clean.isEmpty() ? "" : " (带附言)");
         return new ShareResult(invitation, message.getId());
+    }
+
+    /**
+     * 附言的形状 —— <b>唯一的一处</b>, 因为它是这条链上唯一由用户输入决定的字段。
+     *
+     * <p>五步, 每一步都在挡一类具体的坏输入:
+     *
+     * <ol>
+     *   <li><b>控制字符</b>(C0 里除 \t \n \r 之外的全部, 加 DEL)删掉。零宽字符在气泡里
+     *       什么都看不见, 但它会让那段文本在日志、终端、告警里表现异常 —— 一个只用来搞坏
+     *       别人排查过程的字符没有保留的理由。</li>
+     *   <li><b>一段横向空白压成一个普通空格</b>。这里用的是 {@code \p{Zs}} 而不是
+     *       {@code " "} —— 那一位字符集里还有<b>不换行空格</b>(U+00A0, 手机键盘与网页复制
+     *       粘贴里极常见)和<b>全角空格</b>(U+3000, 中文输入法直接打得出来)。它们与普通空格
+     *       在气泡里长得一模一样, 所以只收普通空格等于没做这件事: 用户粘一段话进来, 中间
+     *       照样能出现一截撑开版面的空档。\t 也要一起收 —— 它在 C0 里但不属于 Zs。</li>
+     *   <li><b>连续空行压成一个</b>: 附言允许换行(用户会分行写), 但不允许用它把一条消息
+     *       撑成一屏。</li>
+     *   <li><b>截断到 {@link #MAX_NOTE}</b>。客户端也截一次(为了让人当场看见), 但权威是
+     *       这里 —— 调这个端点的不止那一个界面。</li>
+     *   <li><b>去首尾空白</b>, 于是"只打了几个空格"等价于"没写附言"。</li>
+     * </ol>
+     *
+     * <p>静态且包可见, 为的是它能被直接断言: 附言是**用户输入**流进一条别人会看到的消息
+     * 的唯一通道, 而这条通道上的规则如果埋在方法体里, 唯一能测它的方式就是起一个 Spring
+     * 上下文去调 {@code share} —— 那种测试会在任何一次无关重构里变红。
+     */
+    static String sanitizeNote(String note) {
+        if (note == null) return "";
+        String cleaned = note
+                .replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]", "")
+                .replaceAll("[\\t\\p{Zs}]+", " ")
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
+        return cleaned.length() <= MAX_NOTE ? cleaned : cleaned.substring(0, MAX_NOTE);
     }
 
     // ─────────────────────────── 内部 ───────────────────────────
@@ -206,13 +277,52 @@ public class ConversationApplicationService {
         return data;
     }
 
-    private Map<String, Object> invitationMetadata(ApplicationInvitation invitation) {
+    /**
+     * 邀请消息的结构化载荷。
+     *
+     * <h2>为什么这里多了 {@code applicationId} / {@code name} / {@code description}</h2>
+     *
+     * 一张给收件人看的卡片要回答三个问题: <b>是什么应用</b>、<b>谁邀请我</b>、<b>点了去哪</b>。
+     * 前两个以前只能靠 {@code content} 那句话去猜, 而"从一句中文里正则出一个应用名"是那种
+     * 一旦被翻译成别的语言就静默失效的做法。
+     *
+     * <p>名字与描述<b>刻意不落进 content</b>(那句话由 {@link #invitationText} 生成, 它自己
+     * 会去问一次) —— 但这两处问的是同一次调用, 所以不存在"卡片上的名字与句子里的名字不一样"。
+     *
+     * <h2>这里<b>没有</b> {@code coverUrl}</h2>
+     *
+     * 不是漏了。第三方应用可以在它的分享请求里带一个封面地址, 但那个地址**不进这条消息**:
+     * 这条消息会在<b>别人</b>的客户端上渲染, 而一个外部图片地址一旦进了收件人的消息流,
+     * 收件人的 IP、打开时间、看没看这条就全都回报给了那个应用作者 —— 他与收件人之间没有任何
+     * 关系。收件人看到的那张封面由客户端按应用名画出来(见前端 {@code share.ts} 的
+     * {@code coverOf}), 对任何应用都成立, 且不需要信任任何人。
+     *
+     * <p>放 {@code name} 与 {@code description} 是因为它们是**文字**, 会被裁剪、会在气泡里
+     * 当文本渲染, 一个应用无法用它们做超出"写一句话"的事。
+     */
+    private Map<String, Object> invitationMetadata(InvocationContext context,
+                                                   ApplicationInvitation invitation,
+                                                   String note) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("invitationId", invitation.invitationId());
         data.put("sessionId", invitation.sessionId());
         data.put("joinUrl", invitation.joinUrl());
         data.put("role", invitation.role());
         data.put("maxUses", invitation.maxUses());
+        if (!note.isEmpty()) data.put("note", note);
+
+        // 名字要在应用平台上再问一次 —— 票里只有 sessionId。问不到就不写这两栏:
+        // 一张只有链接的卡片仍然是能用的卡片, 而编一个名字出来是让它变成错的卡片。
+        try {
+            ApplicationSessionView session = catalogue.session(context, invitation.sessionId());
+            data.put("applicationId", session.applicationId());
+            catalogue.card(context, session.applicationId()).ifPresent(card -> {
+                data.put("name", card.name());
+                data.put("description", card.description());
+            });
+        } catch (RuntimeException e) {
+            log.debug("[ConversationApplication] 邀请卡片拿不到应用信息(不影响分享): {}", e.getMessage());
+        }
         return data;
     }
 
