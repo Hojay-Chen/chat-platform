@@ -90,8 +90,8 @@ public class CompanionDomainProxyController {
      * 伴侣域的**兜底**映射。8081 已实现的更精确路径(见类注释)在此**之前**被 HandlerMapping
      * 选中, 到不了这里; 到达这里的都是 8091 的端点。
      *
-     * <p>{@code /api/companions} 本身(列表/创建)也要单列 —— {@code /**} 匹配不到无子路径的
-     * 形式。G1 把伴侣 CRUD 迁去了 8091, 8081 没有这个映射。
+     * <p>{@code /api/companions} 本身(列表/创建)也要单列。G1 把伴侣 CRUD 迁去了 8091,
+     * 8081 没有这个映射。
      *
      * <p><b>{@code /api/persons/**}</b>(真人改自己的账号ID, 8091 的
      * {@code PersonController})也走这里 —— 与伴侣域同一条路, 因为原因完全相同:
@@ -99,8 +99,20 @@ public class CompanionDomainProxyController {
      * 8081 只把调用者的 JWT 原样转发, 自己不新增任何判断(见类注释里对 confused deputy
      * 的那段: 8081 若改用服务身份代签, 任何能过它鉴权的请求就都能借服务身份读到别人的东西)。
      *
-     * <p>只加带 {@code /**} 的那条, **不加**裸 {@code /api/persons} —— 8091 在裸路径上没有
-     * 端点, 加了只会把未知路径静默转发出去, 把 404 变成一个 502。
+     * <h2>一个被实测纠正的假设: {@code /**} 也匹配裸路径</h2>
+     *
+     * 上面那条 {@code /api/companions} 之所以原先被单列, 是以为 {@code /api/companions/**}
+     * 匹配不到无子路径的形式。<b>实测不是这样</b> —— Boot 2.7 默认的 PathPattern(以及更早的
+     * AntPathMatcher)里, {@code /foo/**} 的 {@code **} 可以匹配**零个**路径段, 所以
+     * {@code /api/persons/**} 一条就把 {@code /api/persons} 也吃进来了。
+     * ({@code CompanionDomainRoutingTest.the_persons_prefix_has_exactly_one_owner} 钉住了
+     * 这条性质。)
+     *
+     * <p>结果无害, 而且与伴侣域**一致**: persons 域和 companions 域一样, 整个前缀只有一个
+     * 归属 —— 8091。裸路径会多一次注定 404 的上游往返(8091 在那条路径上没有端点),
+     * 8091 缺席时表现为 502 而不是 404。这两者都不值得为它加一个特例分支: 一个"除裸路径外
+     * 全转发"的代理, 比一个"全转发"的代理更难解释, 而 8091 哪天真的在 {@code /api/persons}
+     * 上加了端点时, 后者不需要改这里。
      */
     @RequestMapping({"/api/companions", "/api/companions/**", "/api/persons/**"})
     public void proxy(HttpServletRequest req, HttpServletResponse resp) {

@@ -141,4 +141,14 @@ public class RecordingChatWorld implements ChatWorldPort {
     public void touchThread(String companionId, String conversationId, String topic, String emotion) {
         throw unsupported("touchThread");
     }
+
+    /**
+     * 硬删一个 peer 的全部会话与消息 —— 这是 {@link ChatWorldPort} 上**破坏性最强**的一个方法,
+     * 所以它在本测试替身里比别的更该抛: 应用平台若哪天从某条读路径顺手动到它, 那不是
+     * "读到空数据", 而是用户的历史被删掉了。
+     */
+    @Override
+    public List<String> purgePeer(String companionId) {
+        throw unsupported("purgePeer");
+    }
 }

@@ -13,7 +13,6 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * G8 —— 伴侣域请求到底被**哪个处理器**接走。
@@ -125,19 +124,30 @@ class CompanionDomainRoutingTest {
     }
 
     /**
-     * {@code /api/persons} 的**裸路径**刻意不转发。
+     * persons 域**整个前缀只有一个归属: 转发兜底** —— 裸路径也算在内。
      *
-     * <p>8091 在裸 {@code /api/persons} 上没有端点。加那条映射的唯一效果是把一个本该
-     * 干脆的 404 变成一次注定失败的上游往返(以及 8091 缺席时的 502)。断言"没有处理器"
-     * 就是在钉住"这条映射没被顺手加上"。
+     * <p>这条用例的前身断言的是"裸 {@code /api/persons} 不该有任何处理器", 依据是
+     * "只加了 {@code /api/persons/**}, 而 {@code /**} 匹配不到无子路径的形式"。
+     * <b>那个依据是错的</b>: Boot 2.7 默认的 PathPattern 里 {@code **} 可以匹配零个路径段,
+     * 所以一条 {@code /api/persons/**} 就把裸路径也吃进来了(实测: 该用例红了, 而映射本身
+     * 与当初的计划一字不差)。同样的事也发生在 {@code /api/companions} 上 ——
+     * 它被与 {@code /api/companions/**} 并列写出, 其实是冗余的。
+     *
+     * <p>于是断言改成真正该守的那条: <b>8081 绝不认领 persons 域的任何一段</b>。
+     * 这与 companions 域的形状完全一致, 也正是"授权判断必须在持有 persons 表的一侧做"
+     * 这句话在路由层的表现 —— 哪天有人在 8081 写了个 {@code /api/persons/...} 控制器,
+     * 它会因为映射更精确而赢过兜底, 这条用例就红。
      */
     @Test
-    void the_bare_persons_path_is_deliberately_not_routed() {
-        MockHttpServletRequest req = new MockHttpServletRequest("GET", "/api/persons");
-        req.setRequestURI("/api/persons");
-        ServletRequestPathUtils.parseAndCache(req);
-        assertNull(wac.getBean(RequestMappingHandlerMapping.class).getHandler(req),
-                "裸 /api/persons 不该有任何处理器 —— 8091 那边没有这个端点");
+    void the_persons_prefix_has_exactly_one_owner() throws Exception {
+        for (String path : new String[]{
+                "/api/persons",              // 裸路径: 被 /** 一并覆盖, 见上面注释
+                "/api/persons/me/handle",
+                "/api/persons/whatever",     // 8091 也不存在的路径, 照样归它 —— 兜底就是兜底
+        }) {
+            assertEquals(CompanionDomainProxyController.class.getSimpleName(), handlerFor("GET", path),
+                    path + " 应归 8091 —— persons 表不在本进程里");
+        }
     }
 
     /** 非伴侣域不受影响 —— 兜底只吃 /api/companions 与 /api/persons。 */

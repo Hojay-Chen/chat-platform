@@ -90,7 +90,17 @@ app:
   agent-platform:
     # 服务间共享密钥 —— 两仓环境变量注入同一个值; JWT 那层表达不了服务身份
     internal-service-key: ${AGENT_PLATFORM_INTERNAL_KEY:luxera-chat-agent-internal-dev-key-change-me}
+    # 8091 = server(认知链/内部面, 走 HMAC 签名)。目录查询与消息通知打这里。
     base-url: ${AGENT_PLATFORM_BASE_URL:http://127.0.0.1:8091}
+
+    # ── openAPI 面(8092) —— 一键创建走这条 ──────────────────────────
+    # 和上面那个 base-url 是**同一个进程的另一个端口**, 鉴权方式也完全不同:
+    # 8091 认 X-Lap-Signature(服务身份), 8092 认 Authorization: Bearer sap_...(客户端身份)。
+    # 两个端口别写混 —— 写混的症状是一句"对面不通", 而对面其实活着。
+    openapi-base-url: ${AGENT_PLATFORM_OPENAPI_BASE_URL:http://127.0.0.1:8092}
+    # 这把 key 在 8092 侧对应一个 can_act_for_users = true 的客户端(一键创建要代用户建 agent)。
+    # 只从环境变量来, 不进源码/manifest/前端(CLAUDE.md 既定约束)。没配时一键创建是 503 死端点。
+    openapi-key: ${AGENT_PLATFORM_OPENAPI_KEY:}
 
   # ── Simulator(DHCP): 聊天平台持有的仿真客户端接入面 ────────
   simulator:

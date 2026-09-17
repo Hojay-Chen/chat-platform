@@ -61,6 +61,48 @@ public class SimulatorPairingService {
      */
     @Transactional
     public ProvisionResult provisionSimulatorAccount(String displayName) {
+        return provisionSimulatorAccount(displayName, null);
+    }
+
+    /**
+     * 同上, 但带一个**幂等锚点** —— 一键创建({@code AgentFriendProvisioningService})走的那个。
+     *
+     * <h2>为什么幂等要做在这一层, 而不是让调用方先查一遍</h2>
+     *
+     * 因为"先查再建"在调用方那一侧是**两次独立的 HTTP/事务**, 中间隔着一次网络往返:
+     * 用户双击、或前端超时重发, 两个请求都会查到"没有", 然后各自建一份。锚点必须落在
+     * 唯一索引约束着的那张表上, 判断与写入才在同一个事务里。调用方只需要保证
+     * **同一个意图复用同一个 requestId**(它是调用方生成的, 与 {@code client_message_id} 同一先例)。
+     *
+     * <h2>命中之后的四种形状, 四种答复</h2>
+     *
+     * <ul>
+     *   <li><b>PAIRING 且码未过期</b> —— 原样返回同一个账号、同一台设备、<b>同一个码</b>。
+     *       重试的语义是"我没收到上次的答复", 而不是"给我换个码"; 换了码的话, 上一次
+     *       那个可能已经在对面手上, 两个码指向同一个账号是没必要的混乱。</li>
+     *   <li><b>PAIRING 但码已过期</b> —— 同账号换新码。这里<b>不</b>新建账号: 账号ID
+     *       一旦发出去就不可回收({@code Person} 里已有这条不变量), 而重试者手上可能
+     *       还捏着那个 id。</li>
+     *   <li><b>ACTIVE</b> —— 已经配对过了, 没有码可给(null)。调用方据此知道"这台设备
+     *       不需要再配一次", 而不是把 null 当失败。</li>
+     *   <li><b>REVOKED</b> —— <b>复活同一账号</b>: 状态回 PAIRING、换新码。这是"上次跑到
+     *       第三步失败了, 补偿把设备吊销了, 用户又点了一次"的那条路。用同一个账号是必须的
+     *       —— 仓 2 那边的 {@code companions.chat_account_id} 唯一索引记得它, 换个账号就
+     *       会绕过那个唯一键、铸出第二份。</li>
+     * </ul>
+     *
+     * <p>四条路都<b>只碰同一行</b>: 无论如何都不会出现第二个 {@code users} 行。
+     */
+    @Transactional
+    public ProvisionResult provisionSimulatorAccount(String displayName, String requestId) {
+        String anchor = requestId == null || requestId.isBlank() ? null : requestId.trim();
+        if (anchor != null) {
+            SimulatorDevice existing = deviceRepo.findByRequestId(anchor).orElse(null);
+            if (existing != null) {
+                return reuseExisting(existing, displayName);
+            }
+        }
+
         // 1. 普通用户行(密码为随机值, 不可登录; 走 /ws/simulator 设备鉴权)
         User simUser = new User();
         simUser.setUsername("sim-" + UUID.randomUUID().toString().substring(0, 12));
@@ -76,6 +118,7 @@ public class SimulatorPairingService {
         SimulatorDevice device = new SimulatorDevice();
         device.setAccountId(simUser.getId());
         device.setDisplayName(displayName);
+        device.setRequestId(anchor);
         device.setStatus(STATUS_PAIRING);
         device.setScopes(String.join(",", DEFAULT_SCOPES));
         device.setPairingCode(generatePairingCode());
@@ -85,6 +128,104 @@ public class SimulatorPairingService {
         log.info("[Simulator配对] 已创建账号 {} + 设备 {}({})", simUser.getId(), device.getDeviceId(), displayName);
         return new ProvisionResult(simUser.getId(), device.getDeviceId(), null,
                 device.getPairingCode(), device.getPairingCodeExpiresAt());
+    }
+
+    /**
+     * 重试命中已有设备时的四条分支 —— 见 {@link #provisionSimulatorAccount(String, String)} 的表格。
+     *
+     * <p>单独一个方法, 是因为"重试"这件事有四种形状而每一种都要单独能读出来; 摊平进上面那段
+     * 主流程里, 四条分支会看起来像四个 if 特例, 而不是一个完整的边界。
+     */
+    private ProvisionResult reuseExisting(SimulatorDevice device, String displayName) {
+        if (STATUS_ACTIVE.equals(device.getStatus())) {
+            // 已配对: 没有码可给, 但**不是失败** —— 调用方接着去做第三步(那边按
+            // chat_account_id 幂等, 会拿回同一个 agent)。
+            log.info("[Simulator配对] requestId 命中已激活设备 {}, 原样复用", device.getDeviceId());
+            return new ProvisionResult(device.getAccountId(), device.getDeviceId(), null, null, null);
+        }
+
+        boolean revived = false;
+        if (STATUS_REVOKED.equals(device.getStatus())) {
+            // 复活同一账号: 令牌版本递增使上一次可能发出去的 JWT 全部失效, secret 一并清掉
+            device.setStatus(STATUS_PAIRING);
+            device.setTokenVersion(device.getTokenVersion() + 1);
+            device.setSecretHash(null);
+            revived = true;
+            log.info("[Simulator配对] requestId 命中已吊销设备 {}, 复活同一账号 {}",
+                    device.getDeviceId(), device.getAccountId());
+        } else {
+            log.info("[Simulator配对] requestId 命中设备 {}, 复用同一账号 {}", device.getDeviceId(), device.getAccountId());
+        }
+
+        // 码: PAIRING 且还有效就原样给(重试的语义是"我没收到上次的答复", 不是"换个码"),
+        // 过期了就换一个。
+        //
+        // 但**刚复活的那台必须换码, 哪怕旧码还没过期** —— 这是吊销这件事的意义所在:
+        // 上一次失败时我们正是为了让那个码失效才吊销的设备, 拿同一个码复活等于把刚收掉的
+        // 凭据原样发回去。旧码也可能已经在别人手上(失败响应丢失的那种重试, 前提就是
+        // 上一次的响应可能已经到达)。
+        boolean expired = revived
+                || device.getPairingCode() == null
+                || device.getPairingCodeExpiresAt() == null
+                || device.getPairingCodeExpiresAt().isBefore(LocalDateTime.now());
+        if (expired) {
+            device.setPairingCode(generatePairingCode());
+            device.setPairingCodeExpiresAt(LocalDateTime.now().plusMinutes(pairingTtlMinutes));
+        }
+        if (displayName != null && !displayName.isBlank()) {
+            device.setDisplayName(displayName);
+        }
+        deviceRepo.save(device);
+        return new ProvisionResult(device.getAccountId(), device.getDeviceId(), null,
+                device.getPairingCode(), device.getPairingCodeExpiresAt());
+    }
+
+    /**
+     * 第四步: 把设备绑到对面那个 agent 上 —— 一键创建成功之后收尾。
+     *
+     * <p>这一步失败要**抛**。它和外面那次跨平台调用不同: 那里失败是我们的编排没走完,
+     * 这里失败是"聊天账号与 agent 都建好了, 只是没记下它们是一对", 静默吞掉的话调用方
+     * 会报告创建成功, 而用户之后会发现这个 agent 永远说不了话(它不知道自己该用哪个账号)。
+     * 抛出去之后重试是安全的 —— 同一个 requestId 会命中同一台设备与同一个 agent, 再走一遍本方法。
+     *
+     * @throws IllegalArgumentException 设备不存在(不该发生: 设备是本方法调用方刚建的)
+     */
+    @Transactional
+    public void attachCompanion(String deviceId, String companionId) {
+        SimulatorDevice device = deviceRepo.findById(deviceId)
+                .orElseThrow(() -> new IllegalArgumentException("设备不存在: " + deviceId));
+        device.setCompanionId(companionId);
+        deviceRepo.save(device);
+        log.info("[Simulator配对] 设备 {} 已绑定 agent {}", deviceId, companionId);
+    }
+
+    /**
+     * 把展示名改掉 —— 设备与它那个 SIMULATOR 账号一起改。
+     *
+     * <h2>为什么需要"改名"这一步</h2>
+     *
+     * 因为一键创建时**账号先于 agent 存在**, 而 agent 的名字要到对面编译完人格才知道。
+     * 先建账号就必然先有一个猜的名字(或者干脆没有), 而这个猜测在几秒后就被证伪了 ——
+     * 于是要么当场改正, 要么永远留着一个假名字。
+     *
+     * <p>两处一起改而不是只改一处: {@code users.nickname}/{@code display_name} 是这个账号
+     * 在聊天侧的名字, {@code simulator_devices.display_name} 是设备管理界面上那一行。
+     * 只改一处的话, 同一个人在两个界面上有两个名字 —— 而这两个界面都会被同一个用户看到。
+     *
+     * <p>不可空的名字不写: 空串和不写是两件事, 前者会把已有的名字擦成一个空格。
+     */
+    @Transactional
+    public void renameAccount(String deviceId, String displayName) {
+        if (displayName == null || displayName.isBlank()) return;
+        SimulatorDevice device = deviceRepo.findById(deviceId).orElse(null);
+        if (device == null) return;
+        device.setDisplayName(displayName);
+        deviceRepo.save(device);
+        userRepo.findById(device.getAccountId()).ifPresent(u -> {
+            u.setNickname(displayName);
+            u.setDisplayName(displayName);
+            userRepo.save(u);
+        });
     }
 
     /**
