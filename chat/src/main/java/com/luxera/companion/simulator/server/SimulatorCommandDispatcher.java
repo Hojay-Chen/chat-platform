@@ -166,10 +166,32 @@ public class SimulatorCommandDispatcher {
         return node;
     }
 
+    /**
+     * {@code chat.listConversations} —— 这台设备（也就是它背后的那个 Agent）参与的所有会话。
+     *
+     * <h2>为什么走 {@code listForMember(accountId)} 而不是 {@code list(accountId, companionId)}</h2>
+     *
+     * 因为后者的判据是 {@code Conversation.user_id = accountId}, 而
+     * {@code Conversation.user_id} **永远是真人**：会话是"真人与某个 Agent 之间的一段对话",
+     * 连一键创建那条路也是把真人写进去的(`ownerUserId`)。于是那句查询对一个
+     * SIMULATOR 账号永远返回**空列表** —— Agent 连上 WS 之后看不到自己要参与的任何会话,
+     * 而它不会报错, 只会安安静静地什么都不说。
+     *
+     * <p>{@code listForMember} 走的是参与者表({@code conversation_participants.member_id}),
+     * 那才是"我参与"这个问题的正确答案 —— 而参与者的 member_id 就是这台设备的 accountId。
+     * 这是"参与者的 member_id 换成聊天账号"这件事真正的收益: 它不只是更正确, 它是这条命令
+     * 能工作的前提。
+     *
+     * <p>{@code args.companionId} 仍然收下但**只用来过滤**: 它让一个设备可以在会话多起来之后
+     * 只问某一个 Agent 的那些, 而不是把它当成归属判据(用别人给的 id 当判据就是越权)。
+     */
     private JsonNode listConversations(CommandMessage cmd, SimulatorConnection conn) {
         ListConversationsCommand lc = objectMapper.convertValue(cmd.args(), ListConversationsCommand.class);
         if (lc == null) throw new IllegalArgumentException("LIST_CONVERSATIONS args 为空");
-        var conversations = conversationService.list(conn.accountId, lc.companionId());
+        var conversations = conversationService.listForMember(conn.accountId).stream()
+                .filter(c -> lc.companionId() == null || lc.companionId().isBlank()
+                        || lc.companionId().equals(c.getCompanionId()))
+                .toList();
         var arr = objectMapper.createArrayNode();
         for (var c : conversations) {
             var node = objectMapper.createObjectNode()

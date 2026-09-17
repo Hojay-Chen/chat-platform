@@ -102,6 +102,17 @@ app:
     # 只从环境变量来, 不进源码/manifest/前端(CLAUDE.md 既定约束)。没配时一键创建是 503 死端点。
     openapi-key: ${AGENT_PLATFORM_OPENAPI_KEY:}
 
+  # ── 一次性维护开关 —— 全部默认 false, 跑完就该关掉 ──────────────
+  maintenance:
+    # 补铸: 给"账号ID 上线之前"就存在的 Agent 铸聊天账号, 并把 chat_account_id 回填仓 2。
+    # 它会在启动时对全平台的 Agent 做跨服务写入, 所以绝不能因为一次常规重启就自己跑起来。
+    # 详见 AgentChatAccountBackfill 的类注释(含幂等与失败处理)。
+    backfill-chat-accounts: ${APP_MAINTENANCE_BACKFILL_CHAT_ACCOUNTS:false}
+    # 会话身份回填: 把 conversations.agent_account_id 从设备绑定推出来, 并把
+    # participants.member_id 与 messages.sender_id 的命名空间从 companionId 换成聊天账号 id。
+    # **必须在上面那个之后**(@Order 20 vs 10): 它只认已经存在的账号, 没有账号的会话原样跳过。
+    backfill-conversation-identities: ${APP_MAINTENANCE_BACKFILL_CONVERSATION_IDENTITIES:false}
+
   # ── Simulator(DHCP): 聊天平台持有的仿真客户端接入面 ────────
   simulator:
     token-secret: ${SIMULATOR_TOKEN_SECRET:luxera-simulator-dhcp-v1-dev-secret-change-me}

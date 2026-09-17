@@ -51,6 +51,21 @@ public class ChatController {
         return conversationService.list(userId, companionId);
     }
 
+    /**
+     * 「给这个 Agent 开一段新对话」。
+     *
+     * <h2>为什么这里**不要**把 {@code ref.peerMemberId()} 传下去</h2>
+     *
+     * 它看起来正是该传的东西: 对面返回的"这个 Agent 在聊天平台上的参与者 id", 而建会话时
+     * 要决定参与者的 member_id。但那样做等于让"这个 Agent 用哪个聊天账号说话"这个问题的
+     * 答案来自**另一个平台**, 而这个问题的答案本来就在本仓: {@code simulator_devices} 里
+     * {@code companion_id} 与 {@code account_id} 的绑定是本仓写的。
+     *
+     * <p>传下去的实际代价是: Agent 平台重启一次, 「打开一段新对话」这个动作就会失败 ——
+     * 而开一段对话完全不需要它在场。走 {@code ConversationService} 里的本地查询
+     * ({@code AgentChatIdentity}) 则两条路都通: 对面在不在都能建会话, 而且新建的会话与
+     * 历史会话用的是**同一条规则**算出来的 member_id。
+     */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public Conversation create(@PathVariable String companionId, @RequestBody(required = false) CreateRequest req) {

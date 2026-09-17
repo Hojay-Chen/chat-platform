@@ -28,18 +28,21 @@ public class ConversationService {
     private final ConversationParticipantRepository participantRepo;
     private final ConversationReadStateService readStateService;
     private final SessionManager sessionManager;
+    private final AgentChatIdentity agentChatIdentity;
 
     public ConversationService(ConversationRepository convRepo, MessageRepository msgRepo,
                                ConversationParticipantService participantService,
                                ConversationParticipantRepository participantRepo,
                                ConversationReadStateService readStateService,
-                               SessionManager sessionManager) {
+                               SessionManager sessionManager,
+                               AgentChatIdentity agentChatIdentity) {
         this.convRepo = convRepo;
         this.msgRepo = msgRepo;
         this.participantService = participantService;
         this.participantRepo = participantRepo;
         this.readStateService = readStateService;
         this.sessionManager = sessionManager;
+        this.agentChatIdentity = agentChatIdentity;
     }
 
     /**
@@ -51,10 +54,58 @@ public class ConversationService {
         List<Conversation> list = convRepo.findByUserIdAndCompanionIdOrderByLastMessageAtDesc(userId, companionId);
         if (!list.isEmpty()) {
             Conversation existing = list.get(0);
-            seedParticipants(existing, userId, companionId, companionName);
+            repairAgentIdentity(existing, companionId, companionName);
             return existing;
         }
         return newConversation(userId, companionId, freshTitle(companionName), companionName);
+    }
+
+    /**
+     * 「打开一段已有的会话」时顺手把它的 Agent 身份修正过来 —— 只在**确有可修之处**时动手。
+     *
+     * <h2>为什么这条路径要管身份, 而不只是"确保参与者在"</h2>
+     *
+     * 因为这是唯一一个**必然会碰到老会话**的入口: 界面上点开一个两年前的对话、或数字人平台
+     * 要求打开某个 agent 的线程, 走的都是这里。一次性的回填 runner
+     * ({@code ConversationIdentityBackfill}) 把存量改完之后, 还有一小段窗口是它管不到的:
+     * 回填写的是"它扫过的那一刻"的库, 而这段会话可能在扫描之后又被建出来(用旧代码的进程还在
+     * 跑), 或者它当时因为某种临时原因失败了。
+     *
+     * <p>把修正放在这里, 系统的正确性就不再依赖"那次迁移跑得完整" —— 它会自己收敛。
+     *
+     * <h2>只在会话还没有身份记录时动手</h2>
+     *
+     * 判据是 {@code conv.getAgentAccountId()} 为空, 而不是"参与者行与账号对不上"。后者会让
+     * 每一段正常会话每次被打开都多查一次参与者表 —— 而正常会话恰恰是绝大多数。空值则精确地
+     * 圈出"这段会话还没被迁移过"。
+     *
+     * <p>{@code addIfMissing} 那种"确保有"的写法在这里是危险的: 对一个参与者仍写着
+     * {@code companionId} 的老会话, 它会**再插一行**账号的参与者 —— 一个会话里两个 agent
+     * 参与者, 未读判定会随机落在其中一行上, 而列表页取名字用 {@code putIfAbsent} 又会取到
+     * 另一行。
+     */
+    private void repairAgentIdentity(Conversation existing, String companionId, String companionName) {
+        if (existing.getAgentAccountId() != null && !existing.getAgentAccountId().isBlank()) {
+            // 已经有身份记录了 —— 什么都不做。会话内容不受影响, 而"参与者行还在不在"是另一
+            // 回事(种子的 try/catch 会吞异常), 由 listForMember 的并集兜住。
+            return;
+        }
+        String resolved = agentChatIdentity.chatAccountIdOf(companionId);
+        if (resolved == null) {
+            // 这个 Agent 还没有聊天账号 —— 保持现状。参与者的 member_id 仍是 companionId,
+            // 与 deriveSenderId 的回退值一致, 未读判定照常工作。
+            seedParticipants(existing, existing.getUserId(), companionId, companionName);
+            return;
+        }
+        existing.setAgentAccountId(resolved);
+        convRepo.save(existing);
+        boolean moved = participantService.repointAgent(existing.getId(), companionId, resolved);
+        if (!moved) {
+            // 没搬成: 要么这个会话还没有 agent 参与者(那就补一行), 要么已经有一行是新 id 了
+            // (那正是想要的终态)。补一行是安全的 —— addIfMissing 撞到已有行时什么都不做。
+            seedParticipants(existing, existing.getUserId(), resolved, companionName);
+        }
+        log.info("[会话身份] 会话 {} 的 Agent 身份已修正为账号 {}", existing.getId(), resolved);
     }
 
     @Transactional
@@ -72,9 +123,27 @@ public class ConversationService {
         conv.setUserId(userId);
         conv.setCompanionId(companionId);
         conv.setTitle(title);
+        String agentAccountId = agentChatIdentity.chatAccountIdOf(companionId);
+        conv.setAgentAccountId(agentAccountId);
         convRepo.save(conv);
-        seedParticipants(conv, userId, companionId, companionName);
+        // 参与者的 member_id 与消息的 sender_id 必须是**同一个命名空间**, 否则
+        // ConversationReadStateService.bumpOnMessage 那句
+        // `p.getMemberId().equals(senderId)` 永远为假 —— Agent 会因为它自己发的每一条消息
+        // 收到未读角标。没有账号时退回 companionId: 那是这次迁移之前一直用的值,
+        // 也是 deriveSenderId 的回退值, 两边必须同时退回同一个, 才对得上。
+        seedParticipants(conv, userId, memberIdOf(companionId, agentAccountId), companionName);
         return conv;
+    }
+
+    /**
+     * Agent 在会话里的 member_id —— 有账号就用账号, 没有就退回 agent id。
+     *
+     * <p>写成一个小函数而不是在两处各写一次三元表达式: 这两处(参与者行、消息的 sender_id)
+     * **必须**给出同一个答案, 而它们的值来自同一个判断。抄两份的话, 将来只改一处会造出
+     * "参与者是账号、消息是 agent id"这种最难查的组合 —— 它不报错, 只是未读角标再也不对。
+     */
+    private static String memberIdOf(String companionId, String agentAccountId) {
+        return agentAccountId != null && !agentAccountId.isBlank() ? agentAccountId : companionId;
     }
 
     /**
@@ -353,8 +422,24 @@ public class ConversationService {
      * <p>{@code user} 刻意**不推导**。一对一里推导成 {@code conv.getUserId()} 是对的,
      * 但群聊里"用户"不再是一个人, 那时任何漏传 {@code senderId} 的调用点都会被静默填成
      * **群主的 id** —— 一条署错名的消息比一条没有署名的消息难查得多。留空至少是诚实的。
+     *
+     * <h2>为什么优先 {@code agentAccountId} 而不是 {@code companionId}</h2>
+     *
+     * 因为推导出来的这个值要拿去和参与者的 {@code member_id} 比
+     * ({@code ConversationReadStateService.bumpOnMessage} 判"这条消息是不是我自己发的",
+     * 靠的就是这个比较)。参与者的 member_id 在有账号时是**聊天账号 id** —— 两个值必须来自
+     * 同一个命名空间, 否则比较永远为假, 而症状是"Agent 自己发的消息给它自己涨未读"。
+     *
+     * <p>回退到 {@code companionId} 的那一支不是兼容代码, 是**必须有**的一支: 一个还没有
+     * 聊天账号的 Agent 至今是正常状态, 而建会话那条路在同样的情况下也会退回同一个值
+     * (见 {@code memberIdOf})。两处必须同时退到同一个值, 这才能对上。
+     *
+     * <p>已经是 {@code static} 的老签名 + 一个实例方法: 保留 static 版本给需要它的地方
+     * (推导规则与实例状态无关), 但读账号要拿 instance 字段, 所以这里是实例方法。
      */
-    private static String deriveSenderId(String senderType, Conversation conv) {
-        return "companion".equals(senderType) ? conv.getCompanionId() : null;
+    private String deriveSenderId(String senderType, Conversation conv) {
+        if (!"companion".equals(senderType)) return null;
+        String accountId = conv.getAgentAccountId();
+        return accountId != null && !accountId.isBlank() ? accountId : conv.getCompanionId();
     }
 }
