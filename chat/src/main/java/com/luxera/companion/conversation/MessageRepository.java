@@ -14,6 +14,16 @@ public interface MessageRepository extends JpaRepository<Message, String> {
     long countByConversationId(String conversationId);
 
     /**
+     * 一段会话里某一方发的全部消息 —— 今天只有"把真人那侧的消息标成已读"用它。
+     *
+     * <p>刻意不在查询里再叠一个 {@code deliveryStatus <> 'READ'}: 那一列是**可空**的
+     * (加列与历史数据), 而 SQL 里 {@code NULL <> 'READ'} 是 NULL 不是 true ——
+     * 老行会被悄悄漏掉, 表现为"标了已读但有些消息还是未读", 只看查询语句看不出来。
+     * 状态过滤放在 java 里, null 就按"还没读过"算。
+     */
+    List<Message> findByConversationIdAndSenderType(String conversationId, String senderType);
+
+    /**
      * 一批会话的全部消息 —— 只给 {@link ConversationPurgeService} 用。
      *
      * <p>派生删除**不需要** {@code @Modifying}(那是给带 {@code @Query} 的删除用的);

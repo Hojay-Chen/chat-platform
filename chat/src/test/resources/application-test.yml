@@ -38,3 +38,9 @@ app:
     internal-service-key: test-internal-service-key
     base-url: http://127.0.0.1:8091
     timeout-ms: 2000
+  # 对外开放面的管理密钥。与上面两个同一个理由: 留空 = 管理面是死端点, 那样
+  # ExternalChatAccessTest 只能看到"签不出钥匙", 测不到"签出来的钥匙能用 / 够不到别人的会话"。
+  # 生产上必须由 CHAT_ACCESS_ADMIN_KEY 显式给, 这里不是任何默认值。
+  chat:
+    access:
+      admin-key: test-chat-access-admin-key

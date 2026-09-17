@@ -5,7 +5,7 @@ import com.luxera.companion.contracts.application.PrincipalType;
 /**
  * LAP v1: {@code HUMAN} / {@code AGENT} / {@code SYSTEM} / {@code APPLICATION} 的落地方式。
  *
- * <p>三种来源, 三个实现, <b>刻意不合并成一个"尽力而为"的解析器</b>:
+ * <p>四种来源, 四个实现, <b>刻意不合并成一个"尽力而为"的解析器</b>:
  *
  * <ul>
  *   <li>{@code JwtPrincipalResolver} —— REST。令牌里的 {@code ptype} 说了算;
@@ -14,7 +14,14 @@ import com.luxera.companion.contracts.application.PrincipalType;
  *       + 服务密钥, 密钥不对直接拒。</li>
  *   <li>{@code InternalPrincipalResolver} —— DH 进程内。{@code InvocationContext} 里
  *       必须<em>显式</em>写了 principal 类型, 没写就抛异常。</li>
+ *   <li>{@code ApiKeyPrincipalResolver} —— 第三方接入面。{@code X-Api-Key}(每客户端一把)
+ *       与 {@code X-Admin-Key}(平台管理员一把), 都按哈希查库, 调用方自报不了任何东西。</li>
  * </ul>
+ *
+ * <p>MCP 与接入面看着像同一件事(都是"平台外的程序"), 差别恰恰在最要害的一处: MCP 的
+ * principal 是<b>自报</b>的 —— 持服务密钥者可以声称自己是任何一个 agent; 接入面的
+ * agent id 来自 {@code chat_api_clients} 那一行, 由管理员写入。前者适合"谁能上架应用",
+ * 后者才够格当租户边界(能读某人的私信)。
  *
  * <p>合并成一个解析器的话, 三者会共享一条"取不到就用默认值"的兜底路径, 而那条路径正是
  * "Agent 悄悄变成真人"的入口 —— 一个 Agent 只要拿不到自己的类型, 就会以真人的身份通过所有
@@ -32,26 +39,42 @@ public interface PrincipalResolver {
 
     ResolvedPrincipal resolve(PrincipalRequest request);
 
-    /** 三方共用的入参 —— 三种来源都从这一小撮原始材料里取自己的那部分。 */
+    /** 四方共用的入参 —— 每种来源都从这一小撮原始材料里取自己的那部分。 */
     record PrincipalRequest(String authorizationHeader,
                             String mcpPrincipalHeader,
                             String mcpServiceKey,
+                            String apiKeyHeader,
+                            String adminKeyHeader,
                             com.luxera.companion.contracts.application.InvocationContext internal,
                             String correlationId) {
 
         public static PrincipalRequest ofHeader(String authorizationHeader, String correlationId) {
-            return new PrincipalRequest(authorizationHeader, null, null, null, correlationId);
+            return new PrincipalRequest(authorizationHeader, null, null, null, null, null, correlationId);
         }
 
         public static PrincipalRequest ofInternal(
                 com.luxera.companion.contracts.application.InvocationContext internal) {
-            return new PrincipalRequest(null, null, null, internal,
+            return new PrincipalRequest(null, null, null, null, null, internal,
                     internal == null ? null : internal.correlationId());
         }
 
         public static PrincipalRequest ofMcp(String mcpPrincipalHeader, String mcpServiceKey,
                                             String correlationId) {
-            return new PrincipalRequest(null, mcpPrincipalHeader, mcpServiceKey, null, correlationId);
+            return new PrincipalRequest(null, mcpPrincipalHeader, mcpServiceKey, null, null, null,
+                    correlationId);
+        }
+
+        /**
+         * 第三方接入面: {@code X-Api-Key}(每客户端一把)与 {@code X-Admin-Key}(平台管理员一把)。
+         *
+         * <p><b>这是唯一一条会把这两个头带进解析链的路</b> —— LAP 的 {@link #ofHeader} 仍然
+         * 只带 Authorization。于是"一把 cak_ 钥匙能不能在别的端点上冒充身份"这个问题
+         * 在结构上就不存在: 除接入面之外的任何端点都收不到它, 那些请求只会得到
+         * {@code UNIDENTIFIED_PRINCIPAL}, 而不是某个默认身份。
+         */
+        public static PrincipalRequest ofApiKey(String apiKeyHeader, String adminKeyHeader,
+                                                String correlationId) {
+            return new PrincipalRequest(null, null, null, apiKeyHeader, adminKeyHeader, null, correlationId);
         }
 
         /**
@@ -66,7 +89,7 @@ public interface PrincipalResolver {
                                                    String mcpServiceKey,
                                                    String correlationId) {
             return new PrincipalRequest(authorizationHeader, mcpPrincipalHeader, mcpServiceKey,
-                    null, correlationId);
+                    null, null, null, correlationId);
         }
     }
 

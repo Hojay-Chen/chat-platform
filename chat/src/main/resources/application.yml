@@ -102,6 +102,14 @@ app:
     # 只从环境变量来, 不进源码/manifest/前端(CLAUDE.md 既定约束)。没配时一键创建是 503 死端点。
     openapi-key: ${AGENT_PLATFORM_OPENAPI_KEY:}
 
+  # ── 对外开放面: 把聊天能力发给"平台外的程序"(需求⑦) ────────────
+  chat:
+    access:
+      # 「发钥匙的那把钥匙」—— 管理面(/api/v1/chat/clients)用它签出每客户端一把的
+      # X-Api-Key。留空 = 管理面是死端点(与 app.lap.mcp.service-key 同一哲学): 没有它
+      # 谁也签不出接入钥匙, 于是接入面存在但无人能进, 而不是"无鉴权可进"。
+      admin-key: ${CHAT_ACCESS_ADMIN_KEY:}
+
   # ── 一次性维护开关 —— 全部默认 false, 跑完就该关掉 ──────────────
   maintenance:
     # 补铸: 给"账号ID 上线之前"就存在的 Agent 铸聊天账号, 并把 chat_account_id 回填仓 2。

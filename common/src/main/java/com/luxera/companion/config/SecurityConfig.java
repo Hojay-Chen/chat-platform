@@ -76,6 +76,27 @@ public class SecurityConfig {
                         // 先做 HMAC 签名校验(X-Lap-Timestamp + X-Lap-Signature, 共享
                         // internal-service-key), 密钥没配的部署上 /internal 是 503 死端点。
                         .antMatchers("/internal/**").permitAll()
+                        // 对外开放面(需求⑦): 调用方是**平台外的程序**, 手里只有 X-Api-Key
+                        // 或 X-Admin-Key, 没有 JWT —— 与 MCP/开发者面同一个道理, JWT 这一层
+                        // 表达不了它。留在 anyRequest() 后面的话, 每个接入请求都会在过滤器上
+                        // 变成 Spring 的默认 403 错误体, 连 ApiKeyPrincipalResolver 都见不到,
+                        // 于是"每把钥匙只能碰它绑定的那个 Agent"这条边界根本没机会生效。
+                        //
+                        // 放行整个 /api/v1/chat/** 而不是逐个方法列: 这个前缀是**新开的**,
+                        // 下面每一个端点都只服务这一种身份(真人走的是 /api/conversations、
+                        // /api/companions 那几条老路径, 一条都不在这里), 不存在"某个子路径
+                        // 该由 JWT 鉴权"的情况。将来若有人往这里加一个面向真人的端点,
+                        // 上面那句话就不再成立 —— 那时要改的是这条注释, 不是默默放宽它。
+                        //
+                        // permitAll 不等于敞开: 控制器第一步就是身份解析, 而解析链认不出
+                        // 身份就 401、认出 SYSTEM(管理钥匙)走客户端面就 403。管理钥匙本身
+                        // (app.chat.access.admin-key)为空时, 管理面是 503 死端点。
+                        .antMatchers("/api/v1/chat/**").permitAll()
+                        // 公开配对端点: 第三方 agent 程序拿到 pairingCode 后换 secret 的唯一入口
+                        // (completePairing 在此之前零生产调用者 —— 也就是说配对码一直是死的)。
+                        // 它的身份**就是那个码**, 没有别的凭据可给, 所以只能 permitAll;
+                        // 防线在控制器里: 逐 IP 的失败次数限流 + 码本身的 10 分钟 TTL。
+                        .antMatchers(HttpMethod.POST, "/api/simulator/pair").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

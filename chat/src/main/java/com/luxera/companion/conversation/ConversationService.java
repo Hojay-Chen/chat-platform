@@ -171,6 +171,44 @@ public class ConversationService {
     }
 
     /**
+     * 「这个 Agent 参与的全部会话」—— 第三方接入面的列表动作。
+     *
+     * <p>按 {@code companion_id} 而不是按参与者 {@code member_id}: 接入面的调用方是
+     * <b>Agent 的驱动程序</b>, 它手里有的是 agent id(见 {@code ChatApiClient#agentId}),
+     * 而"这个 Agent 的会话"这个问题在库里的答案就是 {@code conversations.companion_id}
+     * —— 那一列本来就是 agent id。走 member_id 反而要先拿聊天账号 id 再查, 多一步而且
+     * 答案是"这个账号参与的", 比"这个 Agent 的"更宽(账号若在别的会话里当过真人侧, 也会被算进来)。
+     *
+     * <p>WS 面({@code SimulatorCommandDispatcher})走的是 {@code listForMember}: 那儿的调用方
+     * 是<b>设备本身</b>, 它证明自己身份的方式就是那台设备绑定的账号。两个面各自用自己手里
+     * 那个 id 的答案, 而不是让一侧去推另一侧的。
+     *
+     * <p>同一段查询 {@code ChatWorldAdapter.conversationsOf} 已经在用 —— 数字人平台看到的
+     * "这个 Agent 的会话"与第三方程序看到的必须是同一份, 否则两边的认知会漂移。
+     */
+    @Transactional(readOnly = true)
+    public List<Conversation> listOfAgent(String agentId) {
+        return convRepo.findByCompanionIdOrderByLastMessageAtDesc(agentId);
+    }
+
+    /**
+     * 「这段会话属于这个 Agent 吗」—— 接入面的租户边界, 判不过一律 404。
+     *
+     * <p>为什么是 404 而不是 403: 403 等于告诉调用方"这段会话存在, 只是不归你"。
+     * 对一个拿着别的 Agent 钥匙的程序来说, 会话 id 是它猜出来/从前一份配置里抄来的,
+     * 它没有资格知道那个 id 是否真实存在。
+     */
+    @Transactional(readOnly = true)
+    public Conversation requireOwnedByAgent(String agentId, String conversationId) {
+        Conversation conv = convRepo.findById(conversationId)
+                .orElseThrow(() -> new javax.persistence.EntityNotFoundException("会话不存在"));
+        if (!agentId.equals(conv.getCompanionId())) {
+            throw new javax.persistence.EntityNotFoundException("会话不存在");
+        }
+        return conv;
+    }
+
+    /**
      * 「这个会话这个人看得到吗」。
      *
      * <p><b>方法名的语义是二期的, 方法体是今天的</b> —— 今天只可能是会话的属主, 所以查
@@ -244,6 +282,29 @@ public class ConversationService {
             m.setDeliveryStatus(status);
             msgRepo.save(m);
         });
+    }
+
+    /**
+     * 「这个 Agent 把这段会话里真人说的话都读过了」—— 接入面的标记已读。
+     *
+     * <p>只动 {@code sender_type='user'} 的行, 而且只动这一段会话里的。这两条限制都不是
+     * 洁癖: 接入面收的是第三方程序给的 id, 而 {@link #updateDeliveryStatus} 不判归属 ——
+     * 让它接受任意 messageId 就等于发了一个"把别人会话里任意一条消息标成已读/未读"的接口。
+     * 调用方给的 id 在这里只决定"哪一段会话", 决定"改哪些行"的是这段会话的内容。
+     *
+     * @return 真正被改动的条数(已经是 READ 的不计) —— 让调用方能区分"标了"和"本来就已读"
+     */
+    @Transactional
+    public int markHumanMessagesRead(String conversationId) {
+        int changed = 0;
+        for (Message m : msgRepo.findByConversationIdAndSenderType(conversationId, "user")) {
+            if (!"READ".equals(m.getDeliveryStatus())) {
+                m.setDeliveryStatus("READ");
+                msgRepo.save(m);
+                changed++;
+            }
+        }
+        return changed;
     }
 
     @Transactional
