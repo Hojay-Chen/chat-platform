@@ -4,6 +4,8 @@ import { MessageSquare } from 'lucide-react'
 import { ConversationRow } from '@/components/im/ConversationRow'
 import { EmptyState, SearchBar } from '@/components/im/EmptyState'
 import { sortConversations } from '@/lib/conversations'
+import { handleIndex } from '@/lib/handles'
+import { useCompanionStore } from '@/stores/companion'
 import { useConversationStore } from '@/stores/conversations'
 
 /**
@@ -23,12 +25,32 @@ export default function ChatList() {
   const loading = useConversationStore((s) => s.loading)
   const error = useConversationStore((s) => s.error)
   const load = useConversationStore((s) => s.load)
+  const companions = useCompanionStore((s) => s.companions)
+  const loadCompanions = useCompanionStore((s) => s.load)
 
   const [keyword, setKeyword] = useState('')
 
   useEffect(() => {
     load()
   }, [load])
+
+  /**
+   * 账号ID 在**通讯录那一份数据**里, 不在会话列表里 —— 所以直接进聊天 tab 的用户
+   * 需要它被拉过一次。
+   *
+   * <p>为什么不在服务端 join: 账号ID 住在仓 2 的 `persons` 表, 而会话列表由仓 1 从本地列
+   * 拼出来。要让它带账号ID, 8081 就得为每一行回头问一次 8091 —— 列表页里最不该有的 N+1。
+   * 前端两份数据本来就在手上, 合成一次 O(n) 的本地 join 是这里最便宜的正解。
+   *
+   * <p>已经有数据时**不重拉** —— 通讯录多半已经拉过了, 而每一次进聊天 tab 都多打一个
+   * 请求是没有理由的。
+   */
+  useEffect(() => {
+    if (companions.length === 0) void loadCompanions()
+  }, [companions.length, loadCompanions])
+
+  // 索引随列表变 —— 新建 Agent 之后它的账号ID 要在下一次渲染就出现
+  const handles = useMemo(() => handleIndex(companions), [companions])
 
   const rows = useMemo(() => {
     const kw = keyword.trim().toLowerCase()
@@ -90,7 +112,11 @@ export default function ChatList() {
       <ul>
         {rows.map((c) => (
           <li key={c.id}>
-            <ConversationRow summary={c} onOpen={() => navigate(chatRoomHref(c))} />
+            <ConversationRow
+              summary={c}
+              handle={handles.get(c.peer.id)}
+              onOpen={() => navigate(chatRoomHref(c))}
+            />
           </li>
         ))}
       </ul>

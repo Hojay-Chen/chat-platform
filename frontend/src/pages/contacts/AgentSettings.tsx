@@ -6,6 +6,7 @@ import { PanelError, PanelLoading, PanelSection } from '@/components/agent/Panel
 import { Avatar } from '@/components/im/Avatar'
 import { useAgentData } from '@/hooks/useAgentData'
 import { changeSourceZh } from '@/lib/agentLabels'
+import { describeFailure, quotaLabel, type HandleFailure } from '@/lib/handles'
 import { useCompanionStore } from '@/stores/companion'
 import { format } from 'date-fns'
 
@@ -27,31 +28,47 @@ import { format } from 'date-fns'
  */
 interface SettingsBundle {
   agent: Awaited<ReturnType<typeof agentApi.getAgent>>
+  handle: agentApi.HandleView
   lifeEvents: Awaited<ReturnType<typeof agentApi.listLifeEvents>>
   reflections: Awaited<ReturnType<typeof agentApi.listReflections>>
   personaVersions: Awaited<ReturnType<typeof agentApi.listPersonaVersions>>
 }
 
 async function load(companionId: string): Promise<SettingsBundle> {
-  const [agent, lifeEvents, reflections, personaVersions] = await Promise.all([
+  const [agent, handle, lifeEvents, reflections, personaVersions] = await Promise.all([
     agentApi.getAgent(companionId),
+    agentApi.getHandle(companionId),
     agentApi.listLifeEvents(companionId),
     agentApi.listReflections(companionId),
     agentApi.listPersonaVersions(companionId),
   ])
-  return { agent, lifeEvents, reflections, personaVersions }
+  return { agent, handle, lifeEvents, reflections, personaVersions }
 }
 
 export default function AgentSettings() {
   const { companionId } = useParams<{ companionId: string }>()
   const navigate = useNavigate()
   const removeCompanion = useCompanionStore((s) => s.remove)
+  const patchCompanion = useCompanionStore((s) => s.patch)
 
   const { data, loading, error, reload } = useAgentData(companionId, load, null)
   const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [actError, setActError] = useState('')
+
+  /**
+   * 账号ID 这一块的状态。
+   *
+   * <p>`handleView` 是**本地覆盖**: 改号成功后后端回的是改动后的配额, 直接用它, 而不是
+   * 重拉整页(那会把下面三栏的人格版本、复盘、时间线一起抖一遍)。它是 null 时回落到
+   * `load()` 拿到的那个 —— 于是"还没改过"与"改过了"走的是同一条渲染路径。
+   */
+  const [handleView, setHandleView] = useState<agentApi.HandleView | null>(null)
+  const [handleInput, setHandleInput] = useState('')
+  const [handleFailure, setHandleFailure] = useState<HandleFailure | null>(null)
+  const [handleOk, setHandleOk] = useState('')
+  const [handleBusy, setHandleBusy] = useState(false)
 
   if (!companionId) {
     return <PanelError message="没有指定联系人" />
@@ -80,6 +97,8 @@ export default function AgentSettings() {
   }
 
   const { agent, lifeEvents, reflections, personaVersions } = data
+  // 改过号就用改完的那一份(后端回的是改动后的配额), 没改过就用加载时读到的
+  const hv = handleView ?? data.handle
 
   /** 所有写操作共用的壳: 清消息、给出错、跑动作、重拉 */
   async function act(fn: () => Promise<void>, ok: string) {
@@ -103,6 +122,32 @@ export default function AgentSettings() {
       await agentApi.updatePersona(id, description.trim())
       setDescription('')
     }, '人格已更新, 它以新的方式理解世界。')
+  }
+
+  /**
+   * 改账号ID。**刻意不走 `act()`** —— 那个壳把所有失败压成一句字符串, 而这里
+   * 400/409/429 各自带着一句只能由后端给出的话(撞上的是哪个号、什么时候能再改)。
+   * 压成一句"修改失败"就等于把这三件事重新变成同一件事, 那正是这个功能要避免的。
+   */
+  async function changeHandle() {
+    const wanted = handleInput.trim()
+    if (!wanted) return
+    setHandleBusy(true)
+    setHandleFailure(null)
+    setHandleOk('')
+    try {
+      const next = await agentApi.updateHandle(id, wanted)
+      setHandleView(next)
+      setHandleInput('')
+      setHandleOk(`账号ID 已改为 ${next.handle}，今年还剩 ${next.remaining} 次修改机会。`)
+      // 通讯录与聊天列表的账号ID 都来自 companion store 那份缓存 —— 不就地改它,
+      // 返回列表时看到的还是旧号(而库里已经是新的了)
+      patchCompanion(id, { handle: next.handle })
+    } catch (e) {
+      setHandleFailure(describeFailure(e))
+    } finally {
+      setHandleBusy(false)
+    }
   }
 
   async function exportMemories() {
@@ -175,6 +220,69 @@ export default function AgentSettings() {
                 )}
               </div>
             </div>
+          </section>
+
+          <section className="card p-5">
+            <PanelSection
+              title="账号ID"
+              hint="名字可以重复 —— 它是从你的描述里生成的, 相似的描述会得到同一个名字。账号ID 唯一, 用来区分同名的人, 也可以报给别人。"
+            >
+              <div className="flex items-baseline gap-2 rounded-xl border border-line bg-sunken px-3 py-2.5">
+                <span className="text-xs text-ink-faint">当前</span>
+                <span className="select-all font-mono text-sm text-ink">
+                  {hv.handle ?? '（还没有分配）'}
+                </span>
+                <span className="ml-auto shrink-0 text-xs text-ink-faint tnum">
+                  {quotaLabel(hv)}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  className="input min-w-0 flex-1 font-mono"
+                  placeholder="新的账号ID，例如 xiaoman"
+                  value={handleInput}
+                  // 一年三次用完时连输入框一起停掉 —— 让用户敲完再撞一次墙是纯粹的浪费
+                  disabled={handleBusy || hv.remaining <= 0}
+                  onChange={(e) => setHandleInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void changeHandle()
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => void changeHandle()}
+                  disabled={handleBusy || hv.remaining <= 0 || !handleInput.trim()}
+                >
+                  {handleBusy ? '正在修改…' : '修改账号ID'}
+                </button>
+              </div>
+
+              {handleOk && (
+                <p className="rounded-xl border border-ok/30 bg-ok/10 px-3 py-2 text-sm text-ok">
+                  {handleOk}
+                </p>
+              )}
+
+              {/*
+                失败时把后端的 `hint` 一起显示出来 —— 那句话里有只有后端知道的东西
+                (撞上的是哪个号、什么时候滑出窗口), 前端再写一张映射表只会让它过期。
+                见 `lib/handles.ts` 的 describeFailure。
+              */}
+              {handleFailure && (
+                <p className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+                  {handleFailure.message}
+                  {handleFailure.hint && (
+                    <span className="mt-0.5 block text-xs text-danger/80">{handleFailure.hint}</span>
+                  )}
+                </p>
+              )}
+
+              <p className="text-xs text-ink-faint">
+                只能用字母、数字、下划线(_)和短横线(-)，以字母开头, 6-24 个字符。大写会自动转成小写。
+              </p>
+            </PanelSection>
           </section>
 
           <section className="card p-5">

@@ -29,8 +29,8 @@ const summary = (over: Partial<ConversationSummary> = {}): ConversationSummary =
   ...over,
 })
 
-const render = (s: ConversationSummary, onOpen?: () => void) =>
-  renderToStaticMarkup(<ConversationRow summary={s} onOpen={onOpen} />)
+const render = (s: ConversationSummary, onOpen?: () => void, handle?: string) =>
+  renderToStaticMarkup(<ConversationRow summary={s} handle={handle} onOpen={onOpen} />)
 
 describe('ConversationRow', () => {
   it('画对方的名字与最后一条消息', () => {
@@ -96,5 +96,40 @@ describe('ConversationRow', () => {
 
   it('没有 onOpen 时不渲染成按钮 —— 纯展示的行不该长成按钮的样子', () => {
     expect(render(summary())).not.toContain('<button')
+  })
+
+  // ── 账号ID ──────────────────────────────────────────────────────────
+
+  /**
+   * 用户 2026-09-17 看到的那一屏: 9 行里有 7 行都叫「小满」, 而那 7 个是 7 个不同的、
+   * 活着的 Agent。没有账号ID, 那 7 行**在界面上完全无法区分** —— 这条断言钉的就是
+   * "同名但不同号的两行, 画出来必须不一样"。
+   */
+  it('同名但不同账号ID 的两行画出不同的内容', () => {
+    const a = render(summary({ id: 'conv-a', peer: { kind: 'companion', id: 'p-a', name: '小满' } }),
+      undefined, 'k3f9d2m1pq')
+    const b = render(summary({ id: 'conv-b', peer: { kind: 'companion', id: 'p-b', name: '小满' } }),
+      undefined, 'x7n4w8r2tz')
+
+    expect(a).toContain('小满')
+    expect(b).toContain('小满')
+    expect(a).not.toEqual(b)
+    expect(a).toContain('k3f9d2m1pq')
+    expect(b).toContain('x7n4w8r2tz')
+  })
+
+  it('账号ID 挂在名字那一行, 不占副标题 —— 副标题是最后一条消息', () => {
+    const html = render(summary(), undefined, 'k3f9d2m1pq')
+    // 两个都在, 而且账号ID 在"在的"(副标题)之前出现 —— 名字行在上, 副标题在下
+    expect(html).toContain('k3f9d2m1pq')
+    expect(html.indexOf('k3f9d2m1pq')).toBeLessThan(html.indexOf('在的'))
+  })
+
+  /** 补号还没跑过的老数据: 界面上显示为空, **不是**空白块、更不是 "undefined"。 */
+  it('没有账号ID 时不画任何占位', () => {
+    const html = render(summary(), undefined, undefined)
+    expect(html).toContain('林夏')
+    expect(html).not.toContain('font-mono')
+    expect(html).not.toContain('undefined')
   })
 })

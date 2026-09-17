@@ -142,6 +142,17 @@ export default function AgentProfile() {
                 <h1 className="truncate text-xl font-semibold tracking-tight text-ink">
                   {agent.name}
                 </h1>
+                {/*
+                  账号ID 单独一行、带标签。这里是**唯一**该出现「账号ID」这四个字的地方 ——
+                  列表行里它是名字旁边一串需要时才细看的字符, 而资料页是用户来查"她到底
+                  是哪一个"的地方, 所以要写清楚这串东西是什么、并且能被选中复制。
+                */}
+                {agent.handle && (
+                  <p className="mt-1 flex items-baseline gap-1.5 text-xs text-ink-faint">
+                    <span className="shrink-0">账号ID</span>
+                    <span className="select-all truncate font-mono text-ink-soft">{agent.handle}</span>
+                  </p>
+                )}
                 <p className="mt-0.5 truncate text-xs text-ink-faint">
                   {[stageZh(agent.relationshipStage), agent.relationshipType ? relationshipTypeZh(agent.relationshipType) : '']
                     .filter(Boolean)

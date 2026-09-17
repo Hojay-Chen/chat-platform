@@ -229,6 +229,49 @@ export function updatePersona(
   return api.put<void>(`${base(companionId)}/persona`, { description, reason })
 }
 
+// ── 账号ID ──────────────────────────────────────────────────────────
+
+/**
+ * 账号ID 的现状 + 改号配额。
+ *
+ * 字段名跟着后端 `HandleView` 走。`nextChangeAt` 只在额度用尽时非空 —— 界面上就是
+ * "还能改 N 次" 与 "下次可改 YYYY-MM-DD" 两种状态, 互斥。
+ */
+export interface HandleView {
+  handle: string | null
+  /** 最近 365 天内已改次数 */
+  used: number
+  limit: number
+  /** 还能改几次。界面显示这个, **不显示 used** —— 减法在每个调用点做, 总有人做反 */
+  remaining: number
+  nextChangeAt: string | null
+}
+
+/**
+ * 读账号ID 与配额。设置页打开时调一次。
+ *
+ * 与 {@link getAgent} 分开是刻意的: 配额要查流水表, 而 `getAgent` 是通讯录每一行都会
+ * 打的东西。把它塞进 `Companion` 等于每列一次通讯录就多算一遍配额。
+ */
+export function getHandle(companionId: string): Promise<HandleView> {
+  return api.get<HandleView>(`${base(companionId)}/handle`)
+}
+
+/**
+ * 改账号ID。
+ *
+ * 失败时抛的是 {@link ApiError}, 带 `status`:
+ * `400` 形状不对 / `409` 被占用 / `429` 一年三次用完 —— 三种要给三句不同的话,
+ * 而它们各自的 `hint` 里就写着该说的那句。所以调用方不要写自己的映射表,
+ * 直接把 `hint` 显示出来。
+ *
+ * 大小写与前后空白由后端归一, 这里**不做**前端预校验: 一份前端副本就是一份会漂移的规则,
+ * 而漂移的表现是"前端说可以, 后端说不行"。
+ */
+export function updateHandle(companionId: string, handle: string): Promise<HandleView> {
+  return api.put<HandleView>(`${base(companionId)}/handle`, { handle })
+}
+
 // ── 创建流程 ────────────────────────────────────────────────────────
 
 export function compilePersona(description: string): Promise<{ persona: Persona; preview: string }> {

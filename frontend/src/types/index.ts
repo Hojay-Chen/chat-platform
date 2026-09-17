@@ -98,6 +98,17 @@ export interface Persona {
 export interface Companion {
   id: string
   name: string
+  /**
+   * 账号ID —— 与 `name` 正交, 且这是**唯一**能区分两个同名 Agent 的东西。
+   *
+   * 名字是 LLM 从一句描述里生成的, 相似的描述会收敛到同一个名字: 用户的 9 个 Agent 里
+   * 有 7 个都叫「小满」, 而这 7 个是 7 个不同的、活着的 Agent。没有账号ID 时, 聊天列表和
+   * 通讯录里那 7 行**在界面上完全无法区分**。
+   *
+   * 可空是刻意的: 老数据是加列之前建的, 要等 `PersonHandleBackfill` 在启动时补号。
+   * 界面必须接受 null(显示为空), 而不是崩或者显示 "undefined"。
+   */
+  handle?: string | null
   gender?: string | null
   age?: number | null
   birthDate?: string | null

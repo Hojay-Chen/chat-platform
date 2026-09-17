@@ -42,6 +42,39 @@ export function clearToken() {
  * 前端这一层保持纯粹: URL 就是它字面上的意思, 不加前缀、不改写。
  */
 
+/**
+ * 带上状态码与 hint 的请求错误。
+ *
+ * <h2>为什么需要它</h2>
+ *
+ * 改账号ID 会以三种方式失败, 而它们是**三件要采取不同行动的事**:
+ *
+ * - `400` 形状不对 —— 用户可以立刻改对, 提示里还带着一个可用的建议
+ * - `409` 被别人占了 —— 换一个, 但原来的写法没毛病
+ * - `429` 一年三次用完了 —— 此刻改不动, 唯一有用的话是"什么时候能再改"
+ *
+ * 只抛一个 `Error(message)` 的话, 这三者在界面上长得一模一样。而"修改失败"是一句
+ * 用户没法据以行动的话。
+ *
+ * <h2>为什么仍然继承 Error, 并且 message 一个字没变</h2>
+ *
+ * 全仓有大量 `e instanceof Error ? e.message : '...'` 的写法, 它们今天都对。
+ * 这个类只是**多带**了两个字段, 不是换一种错误 —— 所以那些调用点一行都不用改,
+ * 需要区分的调用点自己去 `instanceof ApiError`。
+ */
+export class ApiError extends Error {
+  readonly status: number
+  /** 后端给的可执行下一步。没有时是 null —— 不是空串。 */
+  readonly hint: string | null
+
+  constructor(message: string, status: number, hint: string | null) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.hint = hint
+  }
+}
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const token = getToken()
@@ -56,13 +89,15 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
 
   if (!res.ok) {
     let message = `请求失败 (${res.status})`
+    let hint: string | null = null
     try {
       const data = await res.json()
       if (data?.error) message = data.error
+      if (data?.hint) hint = data.hint
     } catch {
       /* ignore */
     }
-    throw new Error(message)
+    throw new ApiError(message, res.status, hint)
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>

@@ -5,6 +5,7 @@ import { AlphabetIndex } from '@/components/im/AlphabetIndex'
 import { Avatar } from '@/components/im/Avatar'
 import { EmptyState, SearchBar } from '@/components/im/EmptyState'
 import { ListRow, SectionHeader } from '@/components/im/ListRow'
+import { NameWithHandle } from '@/components/im/NameWithHandle'
 import { contactLetters, filterContacts, shouldShowIndex, sortContacts } from '@/lib/contacts'
 import { useCompanionStore } from '@/stores/companion'
 
@@ -107,7 +108,11 @@ export default function Contacts() {
                 <li key={c.id}>
                   <ListRow
                     leading={<Avatar name={c.name} kind="agent" size={40} />}
-                    title={c.name}
+                    // 账号ID 跟名字同一行, **不是**副标题 —— 上面那段"名字下面不写任何
+                    // 东西"依然成立: 它挡的是"内容"(问候语、最后一条消息), 而账号ID 与名字
+                    // 是同一种东西(身份)。而且这里正是最需要它的地方: 通讯录是"都有谁",
+                    // 而两个一模一样的「小满」并没有回答"都有谁"。
+                    title={<NameWithHandle name={c.name} handle={c.handle} />}
                     onClick={() => navigate(`/contacts/agent/${c.id}`)}
                   />
                 </li>
