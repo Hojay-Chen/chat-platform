@@ -1,8 +1,15 @@
 // contract —— 对外接口定义项目。
 //
 // 铁律: 不依赖仓内任何其他 Gradle 项目（settings.gradle 里也只在 chat 侧单向引用它）。
-// 它会被 publishToMavenLocal 成 com.luxera:contract:1.0.0, 被仿真 Agent 平台仓库
+// 它会被 publishToMavenLocal 成 com.luxera:contract:1.0.1, 被仿真 Agent 平台仓库
 // （simulation-agent-platform）当作普通外部依赖引入 —— 这正是"契约先行"的物理形态。
+//
+// 版本史:
+//   1.0.0  G2 拆分时的第一份契约。
+//   1.0.1  删掉 provision 包里那两个**零实现零调用**的编排端口
+//          (ChatProvisioningPort / CompanionProvisioningPort 及其附带记录) —— 它们是
+//          拆分前写的设计草图, 拆分后两仓谁都没实现过。换成真正被接上的那一个:
+//          AgentRegistrationPort(仓 1 → 仓 2 openAPI 的注册调用)。
 //
 // 内部按业务分目录（包名不动, 保持与历史测试/文档的引用一致）:
 //   contracts/chat/          聊天业务的对外契约: api(MessageView…) / events / dhcp / simulator / provision / spi 的三个 chat 端口
@@ -29,7 +36,7 @@ publishing {
             from components.java
             groupId = 'com.luxera'
             artifactId = 'contract'
-            version = '1.0.0'
+            version = '1.0.1'
             // dependencyManagement(BOM) 声明的版本不会进 pom —— 用 resolved 版本发布,
             // 仓 2 引入时才不需要自己再拼一套 BOM
             versionMapping {
