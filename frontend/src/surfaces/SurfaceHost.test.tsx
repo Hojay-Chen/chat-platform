@@ -251,3 +251,65 @@ describe('SurfaceHost · 与后端真正发出来的清单对齐', () => {
     }
   })
 })
+
+/**
+ * `bleed` —— 小程序宿主用的那一个开关。
+ *
+ * 它值得一组自己的断言, 因为它是**一个默认值不能变**的字段: 缺省必须与加它之前
+ * 逐字节相同(上面那 15 条就是证据), 而打开时必须真的把平台让出去。这两件事都容易被
+ * 一次"顺手改改"弄丢, 所以两条都钉住。
+ */
+describe('SurfaceHost · bleed 让应用拥有整个视口', () => {
+  it('缺省(false) 时仍然留白 —— 加这个字段没有改变任何既有调用点', () => {
+    const html = render(allFiveSurfaces(), 'FULL_PAGE')
+    expect(html).toContain('p-4')
+  })
+
+  it('bleed 去掉内边距, 但外框本身一模一样', () => {
+    const plain = render(allFiveSurfaces(), 'FULL_PAGE')
+    const bleed = render(allFiveSurfaces(), 'FULL_PAGE', { bleed: true })
+
+    // **逐字相等**比"不含 p-4"强: 后者会被内容里碰巧出现的 p-4 骗过去(降级提示就带一个),
+    // 而这条要求除那一个 class 之外一个字母都不差 —— 含 min-h-screen 与那四个 data-*。
+    expect(bleed).toBe(plain.replace('flex-1 p-4', 'flex-1'))
+  })
+
+  it('不传 title 也不传 onClose 时, 平台一条头部都不画', () => {
+    // 小程序宿主正是这么用的: title 与 onClose 都不给 → `Frame` 里那一行
+    // `{title || onClose ? <Chrome/> : null}` 不成立 → 应用头上不再有平台那一栏。
+    // 这是"没有平台栏目"的实现方式, 不是巧合, 所以它被钉在这里。
+    const bare = renderToStaticMarkup(
+      <SurfaceHost
+        applicationId={APP}
+        sessionId={SESSION}
+        ui={allFiveSurfaces()}
+        surface="FULL_PAGE"
+        bleed
+      />,
+    )
+    // 框与内容之间直接就是内容 —— 没有夹着一条 Chrome
+    expect(bare).toContain('bg-surface "><div class="flex-1"><div')
+    expect(bare).not.toContain('data-testid="surface-close"')
+
+    // 反证: 同一个调用只要给了 title, 那一栏就回来了。没有这条, 上面那条可能只是
+    // "这个 fixture 恰好画不出标题栏"。
+    const titled = renderToStaticMarkup(
+      <SurfaceHost
+        applicationId={APP}
+        sessionId={SESSION}
+        ui={allFiveSurfaces()}
+        surface="FULL_PAGE"
+        title="井字棋"
+        bleed
+      />,
+    )
+    expect(titled).toContain('井字棋')
+  })
+
+  it('bleed 不会漏到别的容器上', () => {
+    // 它是 FULL_PAGE 专属的: 另外四种的外框由各自的交互契约决定, 与内边距无关。
+    for (const surface of ALL.filter((s) => s !== 'FULL_PAGE')) {
+      expect(attr(render(allFiveSurfaces(), surface, { bleed: true }), 'surface')).toBe(surface)
+    }
+  })
+})

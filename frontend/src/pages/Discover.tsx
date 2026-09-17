@@ -36,12 +36,18 @@ import {
  * /api/v1/capabilities/{id}/applications` 是存在的, 但它是给"我知道要什么、且不想
  * 把整个市场拉下来"的客户端用的 —— 这里不是那种情况。
  *
- * <h2>"打开"在这里只是"开一局"</h2>
+ * <h2>点卡片 = 开应用, 而不是"先看一页介绍"</h2>
  *
- * 卡片上的「打开」直接建会话并进会话页, 不走详情页。这与老 `ApplicationMarket` 的
- * "先看详情再决定"是相反的取舍: 详情页仍然在(点卡片正文进), 但"打开"这个按钮的
- * 语义是**明确的动作**, 而按下一个明确写着"打开"的按钮之后再让用户看一页介绍,
- * 是在惩罚那些已经知道自己要什么的人。想先了解的人点的是卡片正文。
+ * 这里改过一次。原来卡片正文进详情页、「打开」按钮才开局, 理由是"我想了解"与"我要
+ * 开一局"是两种意图。用户看完说: 「点进去怎么不是像人家微信直接打开小程序的前端
+ * 界面呢?」—— 在微信里, 点一个小程序图标**就是**打开它; 没有"详情页"这一站。
+ *
+ * 所以现在整个卡片是一个动作: 建会话、进会话页(也就是小程序运行时)。「详情」降级成
+ * 一个次要的小按钮, 给那少数真的想先看清单里声明了什么的人 —— 它仍然在, 只是不再
+ * 挡在默认路径上。
+ *
+ * 一个入口挡住默认路径的代价, 与"用户已经知道自己要什么却还要再看一页"是同一件事,
+ * 而它发生在**每一个**用户身上。这就是为什么两种意图里该让默认路径服务于多数。
  *
  * <h2>这一页里没有一个应用的名字</h2>
  *
@@ -112,7 +118,7 @@ export default function Discover() {
 
       <div className="px-4 py-4">
         <p className="text-sm leading-relaxed text-ink-soft">
-          打开一个应用就是开一场会话 —— 可以邀请真人和数字人一起进来。
+          点开一个应用就是开一场会话, 应用会占满整屏 —— 可以邀请真人和数字人一起进来。
         </p>
 
         {error && (
@@ -183,12 +189,13 @@ export default function Discover() {
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {shown.map((a) => (
                   <div key={a.applicationId} className="card flex flex-col gap-3 p-3">
-                    {/* 卡片正文进详情页, 按钮直接开局 —— 两个动作分开,
-                        因为"我想了解"和"我要开一局"是两种意图 */}
+                    {/* 整张卡片就是一个动作 —— 点开就是打开它, 与点微信里的小程序图标
+                        是同一种预期。见文件头那段。 */}
                     <button
                       type="button"
-                      onClick={() => navigate(`/applications/${encodeURIComponent(a.applicationId)}`)}
-                      className="block text-left"
+                      disabled={busy}
+                      onClick={() => void openNow(a.applicationId)}
+                      className="block text-left disabled:opacity-60"
                     >
                       <span className="block text-[15px] font-medium text-ink">
                         {a.name || a.applicationId}

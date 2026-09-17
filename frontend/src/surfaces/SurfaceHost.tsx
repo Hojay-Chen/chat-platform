@@ -46,6 +46,19 @@ export interface SurfaceHostProps {
   /** MODAL 的关闭回调。缺省时按"这是无人值守的嵌入"处理, 不显示关闭按钮。 */
   onClose?: () => void
   onExpand?: () => void
+  /**
+   * 让应用**自己拥有整个视口**, 而不是被摆在一张有内边距的纸中间。
+   *
+   * <h2>为什么这是 FULL_PAGE 专属的一个开关, 而不是把 p-4 删掉</h2>
+   *
+   * `p-4` 对"应用详情页里预览一下这个应用"是对的 —— 那块地方不属于应用, 留白是
+   * 在说"这是嵌进来的"。但小程序宿主(用户从「发现」点进来)是另一回事: 那一刻应用
+   * 就是这一屏, 四周那圈 16px 会立刻把它降格成"一个网页里的一块"。
+   *
+   * 两种情况都需要, 所以它是一个开关而不是一次改判。**默认 false** —— 缺省行为与
+   * 加这个字段之前逐字节相同, `SurfaceHost.test.tsx` 的 15 条断言一条都不动。
+   */
+  bleed?: boolean
   className?: string
 }
 
@@ -58,12 +71,13 @@ export default function SurfaceHost({
   fallback,
   onClose,
   onExpand,
+  bleed = false,
   className,
 }: SurfaceHostProps) {
   // 1. 客户端版本 —— 比不过就拒绝渲染, 并说清是哪一边旧
   if (!clientSupports(ui.minClientVersion)) {
     return (
-      <Frame surface={surface} className={className} onClose={onClose} testId="surface-host">
+      <Frame surface={surface} className={className} bleed={bleed} onClose={onClose} testId="surface-host">
         <Notice
           title="需要更新的客户端"
           body={`这个应用要求客户端 ${ui.minClientVersion}, 当前是 ${CLIENT_VERSION}。`}
@@ -81,6 +95,7 @@ export default function SurfaceHost({
     <Frame
       surface={plan.surface}
       className={className}
+      bleed={bleed}
       onClose={onClose}
       onExpand={onExpand}
       title={title}
@@ -179,6 +194,7 @@ interface FrameProps {
   title?: string
   children: ReactNode
   className?: string
+  bleed?: boolean
   onClose?: () => void
   onExpand?: () => void
   testId?: string
@@ -193,6 +209,7 @@ function Frame({
   title,
   children,
   className,
+  bleed = false,
   onClose,
   onExpand,
   testId,
@@ -269,7 +286,8 @@ function Frame({
       return (
         <div {...attrs} className={`flex min-h-screen flex-col bg-surface ${className ?? ''}`}>
           {title || onClose ? <Chrome title={title} onClose={onClose} closeLabel="返回" /> : null}
-          <div className="flex-1 p-4">{children}</div>
+          {/* 见 SurfaceHostProps.bleed —— 小程序宿主让应用自己拥有整个视口 */}
+          <div className={bleed ? 'flex-1' : 'flex-1 p-4'}>{children}</div>
         </div>
       )
   }
