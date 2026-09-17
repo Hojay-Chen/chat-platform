@@ -36,19 +36,22 @@ public class ChatWorldAdapter implements ChatWorldPort {
     private final CompanionEventBus eventBus;
     private final SessionManager sessionManager;
     private final ConversationThreadService threadService;
+    private final ConversationPurgeService purgeService;
 
     public ChatWorldAdapter(ConversationService conversationService,
                             MessageRepository messageRepository,
                             ConversationRepository conversationRepository,
                             CompanionEventBus eventBus,
                             SessionManager sessionManager,
-                            ConversationThreadService threadService) {
+                            ConversationThreadService threadService,
+                            ConversationPurgeService purgeService) {
         this.conversationService = conversationService;
         this.messageRepository = messageRepository;
         this.conversationRepository = conversationRepository;
         this.eventBus = eventBus;
         this.sessionManager = sessionManager;
         this.threadService = threadService;
+        this.purgeService = purgeService;
     }
 
     // ── Reads ────────────────────────────────────────────────────────────────
@@ -218,5 +221,33 @@ public class ChatWorldAdapter implements ChatWorldPort {
         } catch (Exception e) {
             log.debug("记录会话边界失败: {}", e.getMessage());
         }
+    }
+
+    // ── 生命周期 ─────────────────────────────────────────────────────────────
+
+    /**
+     * 见 {@link ChatWorldPort#purgePeer} 的契约说明(尤其是"为什么必须把 conversationId
+     * 还回去")。这里只做两件除了删除以外的事: 先记下会话的属主(删完就查不到了), 再挨个
+     * 往事件流上发一条通知。
+     */
+    @Override
+    @Transactional
+    public List<String> purgePeer(String companionId) {
+        // 属主必须在删之前读: 删完 conversations 行就没了, 事件没有收件人可发。
+        // key = conversationId, value = 人类一方的 userId
+        Map<String, String> owners = conversationRepository
+                .findByCompanionIdOrderByLastMessageAtDesc(companionId).stream()
+                .collect(java.util.stream.Collectors.toMap(Conversation::getId, Conversation::getUserId));
+
+        List<String> purged = purgeService.purgePeer(companionId);
+
+        // 通知而不是"等下一次刷新": 用户很可能正开在这个 agent 的会话页上按的删除。
+        // 发完就没人再订阅这个 companionId 的流了 —— 这条是它最后一条事件。
+        for (String conversationId : purged) {
+            eventBus.publish(companionId, ChatEventTypes.CONVERSATION_DELETED, Map.of(
+                    "conversationId", conversationId,
+                    "userId", owners.getOrDefault(conversationId, "")));
+        }
+        return purged;
     }
 }

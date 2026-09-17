@@ -67,3 +67,46 @@ describe('classifyRoomEvent · 该不该刷新会话列表（这一组是那个 
     expect(classifyRoomEvent('companion_message', { conversationId: 42 }, ME).applyToRoom).toBe(false)
   })
 })
+
+describe('classifyRoomEvent · 会话被销毁了（对面的 Agent 被删）', () => {
+  it('★ 销毁的正是我开着的这段 → 必须离开房间', () => {
+    // 用户很可能就是开着这个房间按的删除(手机上从会话页返回设置页)。不处理的话他会
+    // 停在一段永远不再更新、也发不出去任何东西的记录上, 而没有任何东西告诉他为什么。
+    const r = classifyRoomEvent('conversation_deleted', { conversationId: ME }, ME)
+    expect(r.closeRoom).toBe(true)
+    // 房间都要走了, 往它的消息流里插东西已经没有意义 —— 三个答案是互斥的意图
+    expect(r.applyToRoom).toBe(false)
+    // 但列表那一行得消失, 所以仍要刷新
+    expect(r.refreshList).toBe(true)
+  })
+
+  it('销毁的是别段会话 → 不关我的房间, 只让列表少掉那一行', () => {
+    const r = classifyRoomEvent('conversation_deleted', { conversationId: OTHER }, ME)
+    expect(r.closeRoom).toBe(false)
+    expect(r.applyToRoom).toBe(false)
+    expect(r.refreshList).toBe(true)
+  })
+
+  it('没带 conversationId 的销毁事件不关房间 —— 认不出是哪一段, 贸然离开比留下更糟', () => {
+    const r = classifyRoomEvent('conversation_deleted', {}, ME)
+    expect(r.closeRoom).toBe(false)
+    expect(r.refreshList).toBe(true)
+  })
+
+  it('还没打开任何会话时不会误判成"我这段被销毁了"', () => {
+    expect(classifyRoomEvent('conversation_deleted', { conversationId: ME }, undefined).closeRoom)
+      .toBe(false)
+  })
+
+  it('普通消息事件永远不会关房间 —— 这个答案是销毁独有的', () => {
+    for (const e of ['companion_message', 'message_created', 'companion_typing', 'message_read']) {
+      expect(classifyRoomEvent(e, { conversationId: ME }, ME).closeRoom, e).toBe(false)
+    }
+  })
+
+  it('事件体畸形也不炸', () => {
+    expect(() => classifyRoomEvent('conversation_deleted', null, ME)).not.toThrow()
+    expect(classifyRoomEvent('conversation_deleted', null, ME).closeRoom).toBe(false)
+    expect(classifyRoomEvent('conversation_deleted', { conversationId: 42 }, ME).closeRoom).toBe(false)
+  })
+})

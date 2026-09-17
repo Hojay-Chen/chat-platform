@@ -13,6 +13,14 @@ public interface MessageRepository extends JpaRepository<Message, String> {
     List<Message> findTop200ByConversationIdOrderByCreatedAtDesc(String conversationId);
     long countByConversationId(String conversationId);
 
+    /**
+     * 一批会话的全部消息 —— 只给 {@link ConversationPurgeService} 用。
+     *
+     * <p>派生删除**不需要** {@code @Modifying}(那是给带 {@code @Query} 的删除用的);
+     * 它绕过持久化上下文直接下发一条 DELETE, 对"整段会话都不要了"正是想要的语义。
+     */
+    long deleteByConversationIdIn(java.util.Collection<String> conversationIds);
+
     /** 幂等键查询(clientMessageId 同会话唯一) */
     Optional<Message> findByConversationIdAndClientMessageId(String conversationId, String clientMessageId);
 

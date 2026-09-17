@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { Message } from '@/types'
 import type { ConversationSummary } from '@/api/conversations'
 import * as convApi from '@/api/conversations'
@@ -40,6 +41,7 @@ export function useChatRoom(conversationId: string | undefined) {
 
   const refresh = useConversationStore((s) => s.load)
   const patchConv = useConversationStore((s) => s.patch)
+  const navigate = useNavigate()
 
   // 事件处理器在异步回调里读它, 所以走 ref —— 见 useConversationEvents 的注释
   const convIdRef = useRef(conversationId)
@@ -114,7 +116,19 @@ export function useChatRoom(conversationId: string | undefined) {
     (event: string, data: unknown) => {
       const d = (data ?? {}) as Record<string, unknown>
       // 判定在 lib/roomEvents.ts 里, 那边有测试 —— 这里只负责按答案行动
-      const { applyToRoom, refreshList } = classifyRoomEvent(event, data, convIdRef.current)
+      const { applyToRoom, refreshList, closeRoom } = classifyRoomEvent(
+        event,
+        data,
+        convIdRef.current,
+      )
+
+      // 这段会话没了(对面的 Agent 被删了)。先刷列表让那一行消失, 再离开 —— 顺序反过来的话,
+      // 列表里那一行会在导航动画期间还亮着。房间里的其他状态不必清: 组件马上卸载。
+      if (closeRoom) {
+        void refresh()
+        navigate('/chat', { replace: true })
+        return
+      }
 
       // 归属: 事件里带了就用它, 没带就用当前打开的那段。
       // 走到这里时若 convId 非空, 它必然等于 convIdRef.current(见 classifyRoomEvent),
@@ -171,7 +185,7 @@ export function useChatRoom(conversationId: string | undefined) {
       //   与消息属不属于当前会话无关 —— 这一行就是那个 bug 的修复。
       if (refreshList) void refresh()
     },
-    [refresh],
+    [refresh, navigate],
   )
 
   useConversationEvents(conv?.peer.id, onEvent)

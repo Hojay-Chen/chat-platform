@@ -7,4 +7,7 @@ import java.util.List;
 public interface ConversationBoundaryRepository extends JpaRepository<ConversationBoundary, String> {
     List<ConversationBoundary> findTop10ByConversationIdOrderByOccurredAtDesc(String conversationId);
     ConversationBoundary findTopByConversationIdOrderByOccurredAtDesc(String conversationId);
+
+    /** 级联清理用, 见 {@link ConversationPurgeService} */
+    long deleteByConversationIdIn(java.util.Collection<String> conversationIds);
 }

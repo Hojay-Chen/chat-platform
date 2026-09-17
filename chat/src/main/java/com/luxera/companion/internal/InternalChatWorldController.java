@@ -155,6 +155,24 @@ public class InternalChatWorldController {
                 body.topic(), body.emotion());
     }
 
+    // ── 生命周期 ────────────────────────────────────────────────────────────
+
+    /**
+     * 仿真 Agent 被删除 —— 清掉它在聊天平台的全部会话与消息, 返回被销毁的 conversationId。
+     *
+     * <p><b>这是本类唯一的破坏性端点</b>(其余都是追加或改写)。响应体不是"报告", 是调用方
+     * 完成自己那一半删除所必需的输入: 仓 2 的 {@code session_summaries} 按 conversationId
+     * 存, 而那个 id 是 chat 分配的, 仓 2 自己算不出来。
+     *
+     * <p>用 {@code DELETE} 而不是 {@code POST .../purge} 是为了让"这会毁掉东西"在路由上就
+     * 看得见 —— 这个端点不该被任何重试框架"顺手重发"时看起来像一次普通写入。
+     * 重复调用是安全的(幂等), 第二次返回空列表。
+     */
+    @DeleteMapping("/peers/{companionId}")
+    public List<String> purgePeer(@PathVariable String companionId) {
+        return chatWorld.purgePeer(companionId);
+    }
+
     // ── 请求体 ──────────────────────────────────────────────────────────────
 
     public record EnsureConversationBody(String userId, String companionId, String companionName) {}

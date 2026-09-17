@@ -15,4 +15,7 @@ public interface ConversationThreadRepository extends JpaRepository<Conversation
 
     Optional<ConversationThread> findFirstByConversationIdAndStatusOrderByLastMessageAtDesc(
             String conversationId, String status);
+
+    /** 级联清理用, 见 {@link ConversationPurgeService} */
+    long deleteByConversationIdIn(java.util.Collection<String> conversationIds);
 }

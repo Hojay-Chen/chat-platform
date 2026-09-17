@@ -37,4 +37,12 @@ public final class ChatEventTypes {
 
     /** An application/game event inside a conversation: {@code {appCode, type, ...}}. */
     public static final String GAME_EVENT = "game_event";
+
+    /**
+     * The peer behind a conversation no longer exists and the conversation is gone:
+     * {@code {conversationId, userId}}. Emitted once per destroyed conversation, right before the
+     * stream goes quiet for good — a client sitting in that chat room uses it to leave instead of
+     * waiting for a 404 on its next request.
+     */
+    public static final String CONVERSATION_DELETED = "conversation_deleted";
 }

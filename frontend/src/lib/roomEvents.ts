@@ -31,11 +31,34 @@
 /** 只有这两个事件意味着"落了一条消息" —— 也只有它们会改会话列表的排序与摘要 */
 const MESSAGE_EVENTS = new Set(['message_created', 'companion_message'])
 
+/**
+ * 会话被销毁（对面的 Agent 被删了）。
+ *
+ * <p>它和上面两个不是一类: 那两个是"列表里某一行变了", 这个是"列表里少了一行"。
+ * 但"要不要重新拉列表"的答案是同一个 —— 都是"要"。
+ */
+const DELETED_EVENT = 'conversation_deleted'
+
+/** 会让会话列表需要重新拉取的事件。消息类改排序与摘要, 销毁类直接少一行。 */
+const LIST_EVENTS = new Set([...MESSAGE_EVENTS, DELETED_EVENT])
+
 export interface RoomEventEffect {
   /** 要不要作用在**当前打开的那段会话**的消息流上 */
   applyToRoom: boolean
   /** 要不要重新拉一次会话列表 */
   refreshList: boolean
+  /**
+   * 当前打开的那段会话**已经不存在了** —— 用户得离开这个房间。
+   *
+   * <p>这是"对面把 Agent 删了"的情形: 聊天平台在那段会话被销毁时发最后一条事件
+   * (见 {@code ChatEventTypes.CONVERSATION_DELETED})。用户很可能就是**开着这个房间**
+   * 按的删除(手机上从会话页返回设置页, 桌面上另一标签页), 所以不处理的话他会停在一段
+   * 永远不再更新、也发不出去任何东西的记录上, 而没有任何东西告诉他为什么。
+   *
+   * <p>三个布尔答案是互斥的意图, 不是三个开关: `closeRoom` 为真时, 房间都要走了,
+   * 往它的消息流里插什么已经没有意义 —— 所以 `applyToRoom` 这时恒为 false。
+   */
+  closeRoom: boolean
 }
 
 /**
@@ -50,13 +73,15 @@ export function classifyRoomEvent(
 ): RoomEventEffect {
   const d = (data ?? {}) as Record<string, unknown>
   const convId = String(d.conversationId ?? '')
+  const deleted = event === DELETED_EVENT
 
   return {
-    // 没有 conversationId 的事件按"属于当前会话"处理 —— 老事件流里有这种帧,
-    // 把它们一律丢掉会让某些提示(比如 typing)永远不出现。
-    applyToRoom: !convId || convId === openConversationId,
+    // 销毁事件不往房间里插任何东西 —— 见 closeRoom 的说明。
+    applyToRoom: !deleted && (!convId || convId === openConversationId),
     // ★ 注意这里**没有** `&& applyToRoom`。这一句就是那个 bug 的修复本身:
     //   会话列表画的是所有会话, 所以它的刷新与"消息属于哪段会话"无关。
-    refreshList: MESSAGE_EVENTS.has(event),
+    refreshList: LIST_EVENTS.has(event),
+    // 没带 conversationId 的销毁事件**不**关房间: 认不出它是哪一段, 贸然离开比留下更糟。
+    closeRoom: deleted && !!convId && convId === openConversationId,
   }
 }

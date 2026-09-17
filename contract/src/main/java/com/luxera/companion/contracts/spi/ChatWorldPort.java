@@ -100,4 +100,33 @@ public interface ChatWorldPort {
      * human only supplies its reading of the topic and the emotional colour.
      */
     void touchThread(String companionId, String conversationId, String topic, String emotion);
+
+    // ── Lifecycle ────────────────────────────────────────────────────────────
+
+    /**
+     * The digital human is gone — delete everything the chat platform holds for it, and
+     * <strong>return the ids of the conversations that were destroyed</strong>.
+     *
+     * <h2>Why the caller must be told the ids</h2>
+     * The chat platform owns conversations, messages and their satellites; the digital-human
+     * platform owns {@code session_summaries}, which is keyed by {@code conversationId} — an id it
+     * cannot derive, because it never allocated it (it called {@link #ensureConversation} and was
+     * handed one back, possibly days earlier, without keeping the receipt). Handing the list back
+     * is therefore part of the contract, not a courtesy: the caller needs it to finish its own
+     * half of the deletion.
+     *
+     * <h2>Why this is not part of "the world" the digital human perceives</h2>
+     * Everything else on this port is the digital human reading or writing its own world. This one
+     * is the platform saying that peer no longer exists — it is called by the deletion path, never
+     * by the digital human's own reasoning, and it is the only operation here that destroys
+     * history rather than adding to it.
+     *
+     * <p>Hard delete, deliberately: this is what a user asking to delete an agent means. The
+     * consequence is that <strong>a caller must reach here only from an explicit delete
+     * action</strong>, never from an incidental cleanup.
+     *
+     * <p>Idempotent — a peer with no conversations, or one already purged, returns an empty list
+     * rather than failing. Deleting twice must not blow up the second time.
+     */
+    List<String> purgePeer(String companionId);
 }

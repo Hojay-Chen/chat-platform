@@ -22,4 +22,7 @@ public interface ConversationParticipantRepository extends JpaRepository<Convers
 
     /** 一批会话的全部参与者 —— 列表页一次取回, 不在循环里查 */
     List<ConversationParticipant> findByConversationIdIn(java.util.Collection<String> conversationIds);
+
+    /** 级联清理用, 见 {@link ConversationPurgeService} */
+    long deleteByConversationIdIn(java.util.Collection<String> conversationIds);
 }
