@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>五子棋</title>
+<!--
+  远端五子棋的**界面** —— 与它的协议实现(app.py)同一个进程, 但两者之间没有共享状态:
+  这一页通过 HTTP 从自己的 `/ui/{sessionId}/state` 读局面, 而那个路径读的是 app.py 内存里
+  同一盘棋。
+
+  <h2>它证明的那件事</h2>
+
+  平台**没有**参与这一页的渲染。棋盘是应用自己画的、状态是应用自己给的、连"什么时候刷新"
+  都是这一页自己定的(轮询)。平台只做两件事: 把这一页放进一个 iframe, 以及替它转达
+  "分享"和"叫出聊天窗"这两个请求 —— 而那两件事在下面各占十来行, 且都是**请求**,
+  不是命令。
+
+  <h2>它为什么能不被平台托管</h2>
+
+  一份 manifest 的 `ui.entry` 是浏览器**直接打开**的地址。平台不代理它、不缓存它、
+  也不改它 —— 所以这一页可以是任何东西: 一个静态文件、一个 React 应用、一个 Unity 导出的
+  WebGL 包。这里是最简单的那一种, 因为它要演示的是接缝, 不是前端工程。
+
+  <h2>它怎么知道平台在哪儿</h2>
+
+  见下面的 hostOrigin() —— 这一段是整页里唯一有点绕的地方, 注释写在那儿。
+-->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; display: flex; flex-direction: column; min-height: 100vh;
+    align-items: center; gap: 10px; padding: 12px; background: #14161c; color: #e8ebf2;
+    font: 13px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  header { display: flex; align-items: baseline; gap: 8px; }
+  h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  .turn { font-size: 12px; color: #8b93a7; }
+  #board {
+    display: grid; grid-template-columns: repeat(15, 1fr);
+    width: min(92vw, 340px); aspect-ratio: 1; background: #c8a06a;
+    border-radius: 6px; padding: 3px; gap: 0; touch-action: manipulation;
+  }
+  .cell {
+    position: relative; display: grid; place-items: center;
+    font-size: min(3.2vw, 12px); font-weight: 700; line-height: 1;
+  }
+  .cell::before {
+    content: ""; position: absolute; inset: 0;
+    border-right: 1px solid rgba(60, 40, 10, .35);
+    border-bottom: 1px solid rgba(60, 40, 10, .35);
+  }
+  .cell.x { color: #1b1f2a; }
+  .cell.o { color: #f4f7ff; text-shadow: 0 0 1px #333; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  button {
+    padding: 8px 14px; border-radius: 9px; border: 1px solid #333a4a; background: #232733;
+    color: #e8ebf2; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  button.primary { background: #4f7cff; border-color: #4f7cff; color: #fff; }
+  .note { min-height: 16px; font-size: 12px; color: #8b93a7; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>五子棋</h1>
+  <span class="turn" id="turn">正在读取局面…</span>
+</header>
+
+<div id="board" aria-label="棋盘"></div>
+
+<div class="row">
+  <button id="share">叫朋友来下</button>
+  <button id="chat">边下边聊</button>
+</div>
+<p class="note" id="note"></p>
+
+<script>
+// 路径是 /ui/{sessionId} —— 取第 2 段(索引 1)。
+var SESSION = (location.pathname.split('/').filter(Boolean)[1]) || ''
+
+/**
+ * 平台在哪儿 —— 这一页必须知道它, 因为 Host SDK 是**从平台的域名上**取的。
+ *
+ * 三种来源, 按可靠程度排:
+ *
+ *   1. `location.ancestorOrigins[0]` —— 浏览器告诉我们"谁把我嵌进来的"。这是最准的:
+ *      平台换域名、走不同端口、本地调试, 它都跟着对。**只有 Chromium 系有**, 所以下面
+ *      还有两条。
+ *   2. `?host=` —— 应用自己的配置。真实的应用会在注册时把平台地址写进自己的配置里,
+ *      这一页没有配置文件, 于是用查询参数顶一下。
+ *   3. 没有 —— 那就只显示棋盘, 分享与聊天按钮如实说明"连不上平台"。**不猜**一个默认
+ *      域名: 猜错的表现是"按钮点了没反应", 而没人能从那个现象里查出原因。
+ */
+function hostOrigin() {
+  if (location.ancestorOrigins && location.ancestorOrigins.length) {
+    return location.ancestorOrigins[0].replace(/\/+$/, '')
+  }
+  var fromQuery = new URLSearchParams(location.search).get('host')
+  return fromQuery ? fromQuery.replace(/\/+$/, '') : ''
+}
+
+var HOST = hostOrigin()
+var note = document.getElementById('note')
+function say(text) { note.textContent = text }
+
+// ── 棋盘渲染。整个界面里唯一"属于应用"的部分 ──────────────────────────
+var board = document.getElementById('board')
+var cells = []
+for (var i = 0; i < 225; i += 1) {
+  var cell = document.createElement('div')
+  cell.className = 'cell'
+  board.appendChild(cell)
+  cells.push(cell)
+}
+
+function paint(state) {
+  var marks = state.board || []
+  for (var i = 0; i < 225; i += 1) {
+    var mark = marks[i] || ''
+    cells[i].textContent = mark === 'X' ? '●' : mark === 'O' ? '○' : ''
+    cells[i].className = 'cell' + (mark ? ' ' + mark.toLowerCase() : '')
+  }
+  var turn = document.getElementById('turn')
+  if (state.winner) {
+    turn.textContent = state.winner === 'DRAW' ? '和棋' : (state.winner + ' 赢了')
+  } else {
+    turn.textContent = '轮到 ' + state.turn
+  }
+}
+
+/**
+ * 轮询, 而不是 WebSocket。
+ *
+ * 这一页要知道的只有"棋盘变了没", 而它没有实时性要求 —— 一局棋的节奏是秒级的, 一次
+ * 1.5 秒的 GET 足够。为一个演示应用拉一条长连接, 换来的是重连、心跳、半开连接这一整套
+ * 只有它自己需要处理的状态。真要实时的应用自己上 WS, 平台不管这件事(也不该管)。
+ */
+function tick() {
+  fetch('/ui/' + encodeURIComponent(SESSION) + '/state', { cache: 'no-store' })
+    .then(function (r) { return r.json() })
+    .then(paint)
+    .catch(function () { document.getElementById('turn').textContent = '读不到局面' })
+}
+tick()
+setInterval(tick, 1500)
+
+// ── 接上宿主。取不到 SDK 时按钮如实禁用, 见 hostOrigin() ────────────────
+if (!HOST) {
+  say('这一页不知道平台在哪儿, 分享与聊天不可用(?host= 或由平台嵌进来)')
+  document.getElementById('share').disabled = true
+  document.getElementById('chat').disabled = true
+} else {
+  var script = document.createElement('script')
+  script.src = HOST + '/luxera-host.js'
+  script.onload = function () {
+    luxera.app.ready()
+    luxera.session.context().then(function (ctx) {
+      // 权限来自**容器**: 整页里有, 嵌在别人页面里时没有。
+      say('平台已接上 · 权限 [' + (ctx.permissions || []).join(', ') + ']')
+    }).catch(function () { say('平台已接上') })
+  }
+  script.onerror = function () {
+    say('取不到 ' + HOST + '/luxera-host.js —— 平台地址对吗?')
+  }
+  document.head.appendChild(script)
+}
+
+document.getElementById('share').addEventListener('click', function () {
+  var button = this
+  button.disabled = true
+  // 发给谁由**用户**在平台那张单子上决定 —— 应用只表达"我想让用户分享这一局"。
+  luxera.share.requestShare({
+    sessionId: SESSION,
+    title: '五子棋',
+    description: '这盘棋还没下完, 一起来?'
+  }).then(function (result) {
+    say(result.sent ? '链接已经发到那段对话里了' : '你取消了')
+  }).catch(function (e) {
+    say(e.code === 'NO_PERMISSION' ? '这个位置不能分享, 整页打开再试' : '分享失败: ' + e.code)
+  }).finally(function () { button.disabled = false })
+})
+
+document.getElementById('chat').addEventListener('click', function () {
+  luxera.chat.openWindow({ mode: 'EXPANDED' })
+    .then(function () { say('聊天窗开着 —— 它是平台的, 不随我关掉') })
+    .catch(function (e) {
+      say(e.code === 'NO_PERMISSION' ? '这个位置没有聊天窗' : '叫不出聊天窗: ' + e.code)
+    })
+})
+</script>
+</body>
+</html>

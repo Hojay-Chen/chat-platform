@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>摇骰子</title>
+<!--
+  摇骰子 —— 一个**第三方应用**的完整例子 (§15 / §23 P3)。
+
+  <h2>它为什么长这样</h2>
+
+  这个文件是别人的服务器上的一个静态页, 平台不认识它、也不构建它。它与聊天平台之间
+  只有两样东西:
+
+    1. 一段 <script> —— `luxera-host.js`, 从平台自己的域名上取;
+    2. postMessage —— 也就是那个脚本里实现的 Host Protocol v1。
+
+  它**没有**平台代码、没有构建链、没有一个 npm 依赖。这不是"演示从简", 而是这个接入
+  方式存在的理由: 一个第三方作者要能把已有的页面接上来, 而不是把已有的页面重写一遍。
+
+  <h2>骰子为什么要用 crypto</h2>
+
+  `Math.random()` 是够用的, 但这一页是要给人看的例子 —— 而"例子里用 Math.random 摇骰子"
+  会被后来者抄进真需要随机的地方。用 `crypto.getRandomValues` 只多一行, 且它在这里是
+  真的更对的: 平台不做任何随机, 这一掷完全发生在应用这一侧。
+
+  <h2>它拿不到的东西</h2>
+
+  这一页**不知道**用户是谁的邮箱、有哪些好友、这段对话里还有谁 —— 它只拿到了三个字段的
+  用户公开面(见 §15)。它也不能自己往任何人的消息流里发东西: "分享"是它**请求**用户去做
+  一件事, 而发消息的是用户自己。这条界线是这套接入方式里最要紧的一条。
+-->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; padding: 20px;
+    background: #14161c; color: #e8ebf2;
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .die {
+    width: 132px; height: 132px; border-radius: 26px; display: grid; place-items: center;
+    font-size: 66px; font-weight: 600; background: #232733; border: 1px solid #333a4a;
+    transition: transform .12s ease;
+  }
+  .die.rolling { transform: scale(.92) rotate(-6deg); }
+  h1 { margin: 0; font-size: 17px; font-weight: 600; }
+  .hint { margin: 0; font-size: 12px; color: #8b93a7; text-align: center; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  button {
+    padding: 9px 16px; border-radius: 10px; border: 1px solid #333a4a; background: #232733;
+    color: #e8ebf2; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  button.primary { background: #4f7cff; border-color: #4f7cff; color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .ctx { font-size: 11px; color: #6f7789; text-align: center; word-break: break-all; }
+  .note { font-size: 12px; color: #8b93a7; min-height: 18px; }
+</style>
+</head>
+<body>
+
+<h1>摇骰子</h1>
+<div class="die" id="die">?</div>
+<div class="row">
+  <button class="primary" id="roll">摇一个</button>
+</div>
+<div class="row">
+  <button id="share">叫朋友来摇</button>
+  <button id="chat">边聊边摇</button>
+</div>
+<p class="note" id="note"></p>
+<p class="ctx" id="ctx">正在接入平台…</p>
+
+<script>
+/*
+ * 平台地址从 `?host=` 上来 —— 见这一页的清单里那条 entry。
+ *
+ * 它为什么不是写死的: 这一页是**第三方**的, 它不该知道聊天平台部署在哪儿。真实的应用会
+ * 把它自己那侧的配置传进来(构建期变量、自己的后端下发、或一次跳转带过来), 这里用查询
+ * 参数是因为这一页没有构建链、也没有后端。
+ */
+var params = new URLSearchParams(location.search)
+var HOST = (params.get('host') || location.origin).replace(/\/+$/, '')
+var SESSION = params.get('session') || ''
+
+if (!SESSION) {
+  document.getElementById('ctx').textContent = '没有 session —— 这一页只该由宿主按 entry 打开'
+}
+
+var note = document.getElementById('note')
+function say(text) { note.textContent = text }
+
+// ── 1. 把 SDK 取过来。取不到就明说 —— 一个静默失效的按钮比没有按钮糟。
+var script = document.createElement('script')
+script.src = HOST + '/luxera-host.js'
+script.onerror = function () {
+  document.getElementById('ctx').textContent = '取不到 ' + HOST + '/luxera-host.js —— 宿主地址对吗?'
+  document.getElementById('share').disabled = true
+  document.getElementById('chat').disabled = true
+}
+document.head.appendChild(script)
+
+script.onload = function () {
+  // ── 2. 报到。宿主据此收掉那层"应用启动中"的纱。
+  luxera.app.ready()
+
+  // ── 3. 问问自己现在在哪儿。这一句是**只读**的: 它不申请任何权限。
+  luxera.session.context().then(function (ctx) {
+    document.getElementById('ctx').textContent =
+      (ctx.applicationId || '?') + ' · ' + (ctx.surface || '?') +
+      ' · 权限 [' + (ctx.permissions || []).join(', ') + ']'
+  }).catch(function (e) {
+    document.getElementById('ctx').textContent = '读不到上下文: ' + e.code
+  })
+}
+
+// ── 4. 骰子本体。整个应用里唯一真正属于"应用"的那件事。
+var die = document.getElementById('die')
+document.getElementById('roll').addEventListener('click', function () {
+  var buffer = new Uint32Array(1)
+  crypto.getRandomValues(buffer)
+  die.classList.add('rolling')
+  setTimeout(function () {
+    die.textContent = String((buffer[0] % 6) + 1)
+    die.classList.remove('rolling')
+    say('')
+  }, 120)
+})
+
+/*
+ * ── 5. 分享。注意这里**没有**"发给谁"。
+ *
+ * 应用能表达的只有"我想让用户分享这一场"; 发给谁、附一句什么话, 是用户在平台那张单子上
+ * 决定的。所以这个 Promise 会一直挂着, 直到用户按下发送(sent: true)或关掉单子
+ * (sent: false) —— **取消是正常结果, 不是异常**, 这里对应地把按钮恢复原状。
+ *
+ * 如果这一层容器没有分享权限(EMBEDDED/INLINE 里就是没有), 这个调用会被拒绝, 错误码是
+ * NO_PERMISSION。那时该做的是把按钮改成"整页打开才能分享", 而不是重试。
+ */
+document.getElementById('share').addEventListener('click', function () {
+  var button = this
+  button.disabled = true
+  say('打开分享单子…')
+  luxera.share.requestShare({
+    sessionId: SESSION,
+    title: '摇骰子',
+    description: '摇到几就是几, 来一局?'
+  }).then(function (result) {
+    say(result.sent ? '已经发出去了' : '你取消了')
+  }).catch(function (e) {
+    say(e.code === 'NO_PERMISSION' ? '这个位置不能分享, 整页打开再试' : '分享失败: ' + e.code)
+  }).finally(function () {
+    button.disabled = false
+  })
+})
+
+// ── 6. 聊天浮窗。它属于平台, 不属于这一页 —— 所以用户切走之后再切回来, 窗还在。
+document.getElementById('chat').addEventListener('click', function () {
+  luxera.chat.openWindow({ mode: 'EXPANDED' }).then(function () {
+    say('聊天窗开着, 别管我')
+  }).catch(function (e) {
+    say(e.code === 'NO_PERMISSION' ? '这个位置没有聊天窗' : '叫不出聊天窗: ' + e.code)
+  })
+})
+</script>
+</body>
+</html>

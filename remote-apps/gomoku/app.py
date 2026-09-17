@@ -25,6 +25,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "sdk", "p
 
 from luxera_application import LapError, LapServer  # noqa: E402
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+
 BOARD = 15
 EMPTY = None
 GAMES: dict[str, dict] = {}  # key: session id (从 target URI 解析) → 棋局
@@ -166,6 +168,34 @@ def surrender(request):
         return {"state": public_view(game), "surrendered": False, "reason": "already finished"}
     game["winner"] = "O" if mark == "X" else "X"
     return {"state": public_view(game), "surrendered": True}
+
+
+# ─────────────────────────── 界面侧(GET, 不验签) ───────────────────────────
+
+@server.page("/ui/{sessionId}")
+def ui(request):
+    """manifest 里 `ui.entry` 指的就是这个地址 —— 在这之前它是个 404。
+
+    这一页是**浏览器直接打开**的, 所以它走不了 `/lap/actions:execute` 那条验签的路:
+    用户的浏览器没有那把密钥。它读局面走的是下面那个 JSON 端点, 两者同一个进程、
+    同一份内存, 但**不同的信任模型** —— 见 LapServer.page 的注释。
+    """
+    with open(os.path.join(HERE, "ui.html"), encoding="utf-8") as handle:
+        return handle.read()
+
+
+@server.page("/ui/{sessionId}/state")
+def ui_state(request):
+    """这一页的数据源。返回的形状与动作 `game.state` 的 state 完全一致 ——
+
+    同一个局面在两个地方用两种形状表示, 是"界面显示的棋盘与 agent 看到的棋盘不一样"
+    这类 bug 的唯一来源。所以这里直接复用 `public_view`。
+    """
+    game = GAMES.get(request.params["sessionId"])
+    if game is None:
+        # 还没人开过局 —— 空棋盘, 而不是 404: "这一局还没开始"是一个正常的状态。
+        return public_view(new_game())
+    return public_view(game)
 
 
 if __name__ == "__main__":
