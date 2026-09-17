@@ -1,11 +1,14 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Sparkles } from 'lucide-react'
 import { api } from '@/api/client'
+import { createAgentFriend, newRequestId, type ProvisionedAgentFriend } from '@/api/agentFriends'
 import { Avatar } from '@/components/im/Avatar'
+import { NameWithHandle } from '@/components/im/NameWithHandle'
 import { useCompanionStore } from '@/stores/companion'
+import { creationFailure, pairingNotice } from '@/lib/agentFriends'
 import { RELATIONSHIP_TYPES, relationshipTypeZh, type RelationshipTypeValue } from '@/lib/relationships'
-import type { Companion, Persona } from '@/types'
+import type { Persona } from '@/types'
 
 const TRAIT_ZH: Record<string, string> = {
   warmth: '温柔',
@@ -29,7 +32,7 @@ const DEFAULT_SCENARIOS = [
 
 export default function CompanionCreate() {
   const navigate = useNavigate()
-  const addCompanion = useCompanionStore((s) => s.add)
+  const reloadContacts = useCompanionStore((s) => s.load)
   const [description, setDescription] = useState('')
   const [compiling, setCompiling] = useState(false)
   const [persona, setPersona] = useState<Persona | null>(null)
@@ -38,13 +41,45 @@ export default function CompanionCreate() {
   const [previewing, setPreviewing] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
+  const [errorHint, setErrorHint] = useState<string | null>(null)
   // §七: 用户显式选择的关系类型(Agent 世界中的真实关系状态)
   const [relationshipType, setRelationshipType] = useState<RelationshipTypeValue | ''>('')
+  /** 建成之后的回执 —— 非空时整页换成"已完成"那一屏 */
+  const [created, setCreated] = useState<ProvisionedAgentFriend | null>(null)
+
+  /*
+   * 幂等键 —— **整个一键创建里最不能出错的那个值**。
+   *
+   * 同一个 requestId 重放两次不会铸出第二个聊天账号, 也不会建出第二个 agent; 换一个
+   * requestId 就会 —— 而多出来的那一份**不违反任何约束**, 它只是一行永远没人用的
+   * `users` 加一台永远配不上的设备。也就是说这个 bug 不会以任何形式报错, 只会让用户的
+   * 通讯录里慢慢多出几个连不上话的幽灵好友。
+   *
+   * 所以它的生命周期必须与**意图**一致, 而"意图"在这里就是"我想造这个人":
+   *
+   * - **懒铸**: 点「创建」时才生成。在那之前用户改描述、改关系都是免费的 —— 还没有键。
+   * - **重试复用**: 失败之后再点一次走的是同一个键。这正是"建到一半失败了"能回到同一个
+   *   账号上的原因(后端把上一次的设备吊销了, 同一个键会**复活**它而不是另铸一个)。
+   * - **重新描述时换新**: 人格换了就是另一个人了, 这时复用旧键会拿回上一个 agent。
+   *
+   * **改「关系」不换键**, 这一条是有取舍的: 失败之后改关系再重试, 拿回来的 agent 仍然是
+   * 第一次那个关系(后端按 chat_account_id 幂等, 重放不会更新它)。选了"关系可能是旧的"
+   * 而不是"可能多一个幽灵好友" —— 前者用户看得见也能再改, 后者他根本不知道发生了什么。
+   */
+  const requestIdRef = useRef<string | null>(null)
+
+  /** 回到"还没开始建"的状态, 并让下一次创建换一个幂等键 */
+  function resetIntent() {
+    requestIdRef.current = null
+    setError('')
+    setErrorHint(null)
+  }
 
   async function compile() {
     if (!description.trim()) return
     setCompiling(true)
-    setError('')
+    // 编译出一个新人格 = 换了一个人, 于是上一次的幂等键到此为止(见 requestIdRef 那段)
+    resetIntent()
     try {
       const resp = await api.post<{ persona: Persona; preview: string }>('/api/companions/compile', {
         description: description.trim(),
@@ -73,19 +108,41 @@ export default function CompanionCreate() {
     }
   }
 
+  /**
+   * 「就它了」—— 四步编排的那一次调用。
+   *
+   * <h2>它和这里原先那一行的区别, 就是这一期需求的全部分量</h2>
+   *
+   * 原先打的是 `POST /api/companions`: 8091 建一个 agent 就结束了, **没有聊天账号** ——
+   * 那个 agent 会出现在通讯录里, 但它在聊天平台上没有身份, 说不了话。走出来的是"一个
+   * agent"。
+   *
+   * 现在打 `POST /api/agent-friends`: 聊天平台先铸一个聊天账号, 再拿这个账号的 id 去
+   * agent 平台的 openAPI 登记 agent, 然后回绑设备、建出会话。走出来的是"一个好友"。
+   */
   async function create() {
     if (!persona) return
     setCreating(true)
     setError('')
+    setErrorHint(null)
+    // 懒铸: 第一次点创建时才有键, 之后的重试一路复用它(见 requestIdRef 那段)
+    if (!requestIdRef.current) requestIdRef.current = newRequestId()
     try {
-      const c = await api.post<Companion>('/api/companions', {
+      const friend = await createAgentFriend({
+        requestId: requestIdRef.current,
+        description: description.trim() || undefined,
         persona,
         relationshipType: relationshipType || undefined,
       })
-      addCompanion(c)
-      navigate(`/contacts/agent/${c.id}`, { replace: true })
+      // 通讯录与聊天列表都是从 `/api/companions` 拉的, 而刚建出来的这位在**两个**列表里
+      // 都该出现 —— 所以重拉一次, 而不是只往本地塞一行。这条链在后面还建了一个会话
+      // (好友要出现在聊天列表里), 那是本地拼不出来的。
+      await reloadContacts()
+      setCreated(friend)
     } catch (err) {
-      setError((err as Error).message)
+      const f = creationFailure(err)
+      setError(f.message)
+      setErrorHint(f.hint)
     } finally {
       setCreating(false)
     }
@@ -115,7 +172,31 @@ export default function CompanionCreate() {
       </header>
 
       <main className="mx-auto max-w-3xl px-5 py-8">
-        {error && <p className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-2 text-sm text-danger">{error}</p>}
+        {created ? (
+          <CreatedPanel
+            friend={created}
+            onSeeIt={() => navigate(`/contacts/agent/${created.agentId}`, { replace: true })}
+            onAgain={() => {
+              // 再建一个是**另一个意图** —— 人格、描述、幂等键全部从头来
+              resetIntent()
+              setCreated(null)
+              setPersona(null)
+              setPreview('')
+              setDescription('')
+              setRelationshipType('')
+            }}
+          />
+        ) : (
+          <>
+        {error && (
+          <div className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-2 text-sm text-danger">
+            <p>{error}</p>
+            {/* 后端那句 hint 里有只有它知道的信息(要不要重试、往哪看)。第一句说的是
+                "出了什么事", 这一句说的是"现在能做什么" —— 少了它, 用户面对一个
+                他无法判断严重程度的故障 */}
+            {errorHint && <p className="mt-1 text-xs text-danger/80">{errorHint}</p>}
+          </div>
+        )}
 
         {/* Step 1: 描述 */}
         <section className="card p-6">
@@ -246,6 +327,8 @@ export default function CompanionCreate() {
                 onClick={() => {
                   setPersona(null)
                   setPreview('')
+                  // 丢掉这个人格 = 丢掉这一次意图, 连同它的幂等键(见 requestIdRef 那段)
+                  resetIntent()
                 }}
               >
                 重新描述
@@ -256,7 +339,84 @@ export default function CompanionCreate() {
             </div>
           </section>
         )}
+          </>
+        )}
       </main>
     </div>
+  )
+}
+
+/**
+ * 建成之后那一屏 —— 四步走完之后你手里有什么。
+ *
+ * <h2>为什么要有这一屏, 而不是建完直接跳走</h2>
+ *
+ * 因为**配对码只在这里出现过**。后端在 `completePairing` 之后会把
+ * `simulator_devices.pairing_code` 置空, 也就是说离开这一屏之后, 那串码没有任何地方
+ * 能再查到(唯一能拿回它的办法是拿同一个 `requestId` 重放一次请求, 而那个键只活在上一个
+ * 屏幕的 `useRef` 里)。直接跳走 = 用户永远拿不到他要交给 Agent 程序的那串码。
+ *
+ * <h2>为什么把账号ID 摆在名字旁边</h2>
+ *
+ * 因为这一屏是"你的好友建成了"这句话的证据所在。而两个 agent 可以同名 —— 用户那 7 个
+ * 「小满」就是这么来的。`agent_xxx` 是唯一能回答"刚才建的是哪一个"的东西, 所以它和名字
+ * 一样是主角, 不是脚注。
+ *
+ * <p>三个 id 里只显示这一个: `agentId` 与 `chatAccountId` 都是给程序看的, 摆在用户面前
+ * 只会让人以为"这三个哪个才是我要找的"。它们仍在回执里, 需要时从网络面板能看到。
+ */
+function CreatedPanel({
+  friend,
+  onSeeIt,
+  onAgain,
+}: {
+  friend: ProvisionedAgentFriend
+  onSeeIt: () => void
+  onAgain: () => void
+}) {
+  const notice = pairingNotice(friend)
+  const name = friend.name || '新 Agent'
+
+  return (
+    <section className="card animate-fadeUp p-6">
+      <div className="mb-1 text-xs uppercase tracking-widest text-accent">已完成</div>
+      <h2 className="text-2xl text-ink">它已经住进来了</h2>
+      <p className="mt-1 text-sm text-ink-soft">
+        一个聊天账号、一个 Agent、一段会话 —— 三样一起建好了。它现在同时出现在你的通讯录和聊天列表里。
+      </p>
+
+      <div className="mt-6 flex items-center gap-4">
+        <Avatar name={name} kind="agent" size={56} />
+        <div className="min-w-0">
+          <NameWithHandle
+            name={name}
+            handle={friend.handle}
+            className="text-xl font-semibold text-ink"
+          />
+          <p className="mt-0.5 text-xs text-ink-faint">这个名字可以重复, 上面那串账号ID 不会</p>
+        </div>
+      </div>
+
+      {/* 码要能被一眼读出来、一次选中。`tracking` 是让六个字符不糊成一团,
+          `select-all` 是让一次点击就选中整串 —— 它是要被抄到另一个程序里去的 */}
+      <div className="mt-6 rounded-xl border border-line bg-sunken p-4">
+        <p className="text-xs uppercase tracking-widest text-ink-faint">{notice.title}</p>
+        {notice.code && (
+          <p className="mt-2 select-all font-mono text-3xl tracking-[0.35em] text-ink">
+            {notice.code}
+          </p>
+        )}
+        <p className="mt-2 text-xs leading-relaxed text-ink-soft">{notice.detail}</p>
+      </div>
+
+      <div className="mt-6 flex items-center justify-between">
+        <button className="btn-outline" onClick={onAgain}>
+          再建一个
+        </button>
+        <button className="btn-primary" onClick={onSeeIt}>
+          看看它
+        </button>
+      </div>
+    </section>
   )
 }
