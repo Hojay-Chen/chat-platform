@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -119,6 +120,8 @@ class LapWebSurfaceTest {
      *
      * <p>三样东西必须同时在场, 否则客户端只能自己去拼: 十态原值({@code status})、
      * 五态投影({@code availability} 三列)、以及 ui 计划({@code ui} 五态 surface)。
+     *
+     * <p>第四样是 {@code resources} —— 见下一条断言处那段。
      */
     @Test
     void theApplicationDetailCarriesStatusAvailabilityAndSurfaces() throws Exception {
@@ -135,7 +138,41 @@ class LapWebSurfaceTest {
                 .andExpect(jsonPath("$.ui.type").value("EMBEDDED"))
                 .andExpect(jsonPath("$.ui.surfaces.length()").value(5))
                 .andExpect(jsonPath("$.ui.surfaces[0].entry")
-                        .value("/applications/{applicationId}/sessions/{sessionId}"));
+                        .value("/applications/{applicationId}/sessions/{sessionId}"))
+                // 资源模板必须出现在详情里, 而且**原样是模板**(带 {sessionId}, 没有被
+                // 填成某个具体的场)。客户端拿它做替换, 才能给"开一局"这个在资源还不
+                // 存在时就被调用的动作一个 target —— 否则 /actions:execute 会以
+                // TARGET_REQUIRED 挡下来, 而那个按钮就永远点不动。
+                .andExpect(jsonPath("$.resources.length()").value(1))
+                .andExpect(jsonPath("$.resources[0].uriTemplate").value("game://session/{sessionId}"))
+                .andExpect(jsonPath("$.resources[0].type").isNotEmpty());
+    }
+
+    /**
+     * 两个内置棋类应用的资源模板<b>不一样</b> —— 所以客户端不许写死任何一个。
+     *
+     * <p>这条测试防的是一次很自然的"顺手简化": 前端看见 {@code game://session/{id}} 之后
+     * 把它硬编码进棋盘组件, 于是五子棋({@code gomoku://match/{id}})当场的"开一局"就废了,
+     * 而井字棋仍然好的 —— 这种 bug 只在五子棋上出现, 很难想到去查。
+     */
+    @Test
+    void theTwoBuiltInBoardAppsDeclareDifferentResourceTemplates() throws Exception {
+        String tic = mvc.perform(get("/api/v1/applications/com.luxera.tictactoe")
+                        .header("Authorization", bearer(principalId())))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String gomoku = mvc.perform(get("/api/v1/applications/com.luxera.gomoku")
+                        .header("Authorization", bearer(principalId())))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        String ticTemplate = objectMapper.readTree(tic).path("resources").path(0).path("uriTemplate").asText();
+        String gomokuTemplate = objectMapper.readTree(gomoku).path("resources").path(0).path("uriTemplate").asText();
+
+        assertEquals("game://session/{sessionId}", ticTemplate);
+        assertEquals("gomoku://match/{sessionId}", gomokuTemplate);
+        assertNotEquals(ticTemplate, gomokuTemplate,
+                "两个应用的资源模板不同 —— 客户端必须问平台要模板, 不能写死");
     }
 
     /** 没注册过的应用是 404, 而不是一份空壳详情。 */

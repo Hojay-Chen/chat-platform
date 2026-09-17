@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { lap, LapError, newIdempotencyKey, type ResourceView } from '@/api/lap'
 import type { EmbeddedAppProps } from '@/surfaces/registry'
+// 填模板这件事平台已经有一个函数了, 而且是同一条规矩(只替换那两个变量, 认不出的原样
+// 留着)。资源 URI 模板与 entry 模板是同一种字符串, 所以复用而不是再写一个。
+import { resolveEntry } from '@/surfaces/entry'
 
 /**
  * 一块棋盘的界面实现 —— 井字棋与五子棋共用。
@@ -34,11 +37,55 @@ function boardOf(resource: ResourceView | null): { cells: unknown[]; side: numbe
   return { cells: cells as unknown[], side }
 }
 
-export default function BoardApp({ sessionId }: EmbeddedAppProps) {
+export default function BoardApp({ applicationId, sessionId, surface }: EmbeddedAppProps) {
+  /**
+   * 整页打开时应用拥有整个视口 —— 四周的留白归应用自己管。
+   *
+   * `FULL_PAGE` 现在是小程序运行时, 平台连那圈 16px 内边距都不给了(`bleed`), 于是
+   * 不补这一下的症状是: 文字贴着屏幕最上沿, 而右上角那枚胶囊正压在同一行上。
+   * 另外四种外框由平台给内边距, 再加一层就变成双份。
+   *
+   * 顶上多让出 48px: 平台那枚胶囊浮在右上角(12px 起, 32px 高), 应用的头部若不避开
+   * 就会钻到它底下。微信的小程序也有同一件事, 做法也一样 —— 应用自己避让。
+   *
+   * 这就是 `EmbeddedAppProps.surface` 那个字段存在的理由 —— 它的注释写的是"应用可
+   * 据此调整密度, 但**不该**据此改变行为"。留白是密度, 不是行为。
+   */
+  const shell = surface === 'FULL_PAGE' ? 'px-3 pb-3 pt-12' : ''
+
   const [resource, setResource] = useState<ResourceView | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  /**
+   * 棋盘还不存在时, 动作该指向哪里 —— 见 `create()` 上面那一大段。
+   *
+   * 这个组件对"棋盘"的全部知识就是"这一场里有一个方阵资源", 所以它不去猜哪个模板是
+   * 棋盘: **应用声明了几个资源模板就用第一个**。两个内置棋类应用各自只声明一个。
+   * 真出现一个声明多个模板的应用时, 这条规则会第一次变得不够用, 那时再让它去认 ——
+   * 提前为不存在的情况设计, 只会让今天这一行变难读。
+   */
+  const [target, setTarget] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    lap
+      .application(applicationId)
+      .then((d) => {
+        if (cancelled) return
+        const template = d.resources?.[0]?.uriTemplate
+        setTarget(template ? resolveEntry(template, { applicationId, sessionId }) : null)
+      })
+      .catch(() => {
+        // 拿不到模板只影响"开一局"这一个动作 —— 已经存在的棋盘照样能读能下,
+        // 所以这里不把整块界面打成错误态。
+        if (!cancelled) setTarget(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [applicationId, sessionId])
 
   const load = useCallback(async () => {
     setBusy(true)
@@ -88,14 +135,35 @@ export default function BoardApp({ sessionId }: EmbeddedAppProps) {
   const winner = state?.winner
 
   /**
-   * 开一局。`target` 传 null —— 这正是 R9 决定 3 第 4/5 档存在的理由:
-   * 棋盘还不存在, 所以没有任何 URI 能指向它, 但"我在这一场里"这件事平台知道。
+   * 开一局。
+   *
+   * <h2>`target` 不能传 null —— 这一行曾经是错的</h2>
+   *
+   * 原来这里传 `null`, 注释写的理由是"棋盘还不存在, 所以没有任何 URI 能指向它, 但
+   * '我在这一场里'这件事平台知道"(R9 决定 3 的第 4/5 档)。那两档确实存在, 但它挂在
+   * <b>进程内</b>的调用路径上; HTTP 那条路径上没有任何会话上下文 —— `/actions:execute`
+   * 的请求体里只有 `{action, target, input}`, 没有 sessionId。
+   *
+   * 于是实际发生的是 `ActionGateway` 在解析之前就把空 target 挡掉, 返回
+   * `TARGET_REQUIRED — 缺少 target`。也就是说: 两个内置棋类应用的「开一局」按钮,
+   * 在网页上**从来没有成功过**。
+   *
+   * <h2>正确的 target 从哪来</h2>
+   *
+   * 应用自己声明了它 —— manifest 的 `resources[].uriTemplate`。井字棋是
+   * `game://session/{sessionId}`, 五子棋是 `gomoku://match/{sessionId}`: <b>两个应用不
+   * 一样</b>, 所以这个组件不能写死其中任何一个, 只能问平台要模板然后做替换 ——
+   * 与它已经在做的 entry 替换是同一条规矩(§68)。
    */
   const create = async () => {
+    if (!target) {
+      setError('这个应用没有声明资源模板, 平台无法为它开一局')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      const response = await lap.execute('game.create', null, {}, newIdempotencyKey())
+      const response = await lap.execute('game.create', target, {}, newIdempotencyKey())
       if (response.resource) setResource(response.resource)
       else await load()
     } catch (e) {
@@ -108,7 +176,7 @@ export default function BoardApp({ sessionId }: EmbeddedAppProps) {
 
   if (!board) {
     return (
-      <div className="text-sm text-ink-soft">
+      <div className={`text-sm text-ink-soft ${shell}`}>
         <p>这一场还没有棋盘。</p>
         <div className="mt-3 flex items-center gap-2">
           <button type="button" onClick={create} disabled={busy} className="btn-primary">
@@ -127,7 +195,7 @@ export default function BoardApp({ sessionId }: EmbeddedAppProps) {
   const cellSize = board.side > 10 ? 'h-6 w-6 text-[10px]' : 'h-12 w-12 text-lg'
 
   return (
-    <div>
+    <div className={shell}>
       <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-ink-soft">
         <span>
           轮到 <span className="text-ink">{turn ? String(turn) : '—'}</span>

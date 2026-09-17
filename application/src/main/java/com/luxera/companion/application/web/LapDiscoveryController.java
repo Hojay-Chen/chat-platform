@@ -102,14 +102,37 @@ public class LapDiscoveryController {
                 manifest.actions().size(),
                 status == null ? null : status.name(),
                 AvailabilityView.of(catalogue.availabilityOf(applicationId)),
-                UiView.of(SurfaceCatalogue.effective(manifest)));
+                UiView.of(SurfaceCatalogue.effective(manifest)),
+                manifest.resources().stream().map(ResourceDeclView::of).toList());
     }
 
     /** §97 的应用详情。字段名与 {@code ApplicationView} 对齐, 只多不少。 */
     public record ApplicationDetail(String applicationId, String version, String name,
                                     String description, String category,
                                     List<String> capabilities, int actionCount,
-                                    String status, AvailabilityView availability, UiView ui) {}
+                                    String status, AvailabilityView availability, UiView ui,
+                                    List<ResourceDeclView> resources) {}
+
+    /**
+     * 应用声明的资源模板。
+     *
+     * <p><b>为什么详情里必须有这一段。</b> 一个"开一局"的动作是在资源<em>还不存在</em>时
+     * 被调用的 —— 棋盘没有 URI 可指, 而 {@code /actions:execute} 又硬性要求 target 非空
+     * (没有 target 就选不出是哪个应用声明的 {@code game.create})。于是客户端唯一的出路
+     * 是: 平台把模板给它, 它做替换。
+     *
+     * <p>这与 {@code ui.surfaces[].entry} 是同一件事、同一条规矩(§68): 模板里的变量
+     * 只有 {@code {applicationId}} 与 {@code {sessionId}}, 客户端做且只做替换。
+     * 少了这一段, 那两个内置棋类应用的"开一局"按钮在 HTTP 上永远不可能成功 ——
+     * 它只会拿到 {@code TARGET_REQUIRED}。
+     */
+    public record ResourceDeclView(String type, String uriTemplate, String backing, String agentHint) {
+
+        static ResourceDeclView of(ApplicationManifest.ResourceDecl decl) {
+            return new ResourceDeclView(decl.type(), decl.uriTemplate(),
+                    decl.backing() == null ? null : decl.backing().name(), decl.agentHint());
+        }
+    }
 
     /**
      * §4.1 那张表在 HTTP 上的样子。<b>三列全部显式给出</b>, 而不是只给一个五态名 ——

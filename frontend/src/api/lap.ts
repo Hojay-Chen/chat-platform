@@ -157,6 +157,21 @@ export interface ApplicationDetail {
   status?: string | null
   availability: AvailabilityView
   ui: UiView
+  /**
+   * 应用声明的资源模板 —— `uriTemplate` 里只有 `{applicationId}` 与 `{sessionId}`
+   * 两个变量, 客户端做且只做替换(与 `ui.surfaces[].entry` 同一条规矩)。
+   *
+   * 开一个还不存在的资源时必须靠它: 那时没有任何 URI 能指向它, 而 `/actions:execute`
+   * 硬性要求 target 非空(否则选不出是哪个应用声明的动作)。
+   */
+  resources?: ResourceDeclView[]
+}
+
+export interface ResourceDeclView {
+  type: string
+  uriTemplate: string
+  backing?: string | null
+  agentHint?: string | null
 }
 
 export interface ParticipantView {
