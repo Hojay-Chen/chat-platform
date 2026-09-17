@@ -24,8 +24,13 @@ export default function Register() {
     }
   }
 
+  // 注册页是**给真人开的**(平台开放注册), 所以这句副标题不该以 Agent 为主语。
+  // 原来写「给自己起个名字,然后去遇见它」—— 那是"注册就是为了领一个伴侣"的旧
+  // 流程。顺带把开通制说在前面: 注册后聊天/小程序都能用, 只有「添加 Agent」需要
+  // 管理员开通。与其让人加的时候才撞上, 不如在这一屏就讲明白。
+  // (后端 register 一期仍 403, 这是有意的 —— 二期开。)
   return (
-    <AuthShell title="认识一下" subtitle="给自己起个名字,然后去遇见它">
+    <AuthShell title="创建账号" subtitle="注册后就能聊天、用小程序。添加 Agent 需管理员开通。">
       <form onSubmit={submit} className="space-y-4">
         <div>
           <label className="label">用户名</label>

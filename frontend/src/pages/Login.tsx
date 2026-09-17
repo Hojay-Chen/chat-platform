@@ -25,8 +25,12 @@ export default function Login() {
     }
   }
 
+  // 副标题要一句话说清这个平台是什么。原来是「一个会记住你的数字伴侣」——
+  // 那是重做前的定位, 而它把整个产品说小成了一件事(伴侣), 恰恰漏掉了这个平台
+  // 真正的主体(聊天)和它区别于微信的那块生态(Agent)。三样都点出来, 且让
+  // Agent 只是其中之一。
   return (
-    <AuthShell title="Luxera Companion" subtitle="一个会记住你的数字伴侣">
+    <AuthShell title="Luxera 聊天" subtitle="聊天、应用, 还有你自己的 Agent">
       <form onSubmit={submit} className="space-y-4">
         <div>
           <label className="label">用户名 / 邮箱</label>
