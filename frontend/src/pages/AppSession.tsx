@@ -13,6 +13,7 @@ import {
 } from '@/api/lap'
 import SurfaceHost from '@/surfaces/SurfaceHost'
 import Capsule from '@/components/mini/Capsule'
+import { HostRuntimeProvider } from '@/application-host/useHostRuntime'
 import ActionSheet, { SheetSection } from '@/components/mini/ActionSheet'
 import { ListRow } from '@/components/im/ListRow'
 
@@ -216,6 +217,20 @@ export default function AppSession() {
   // 所以小程序运行时跟着同一条规矩, 而不是自成一个例外。
   if (surface === 'FULL_PAGE') {
     return (
+      /**
+       * §7/§9/§10/§15 的宿主运行时 —— 聊天浮窗、分享单子、以及那条把应用接上来的桥。
+       *
+       * <h2>为什么 Provider 挂在这一个分支里, 而不是整个页面上</h2>
+       *
+       * `conversationId` 要等会话加载完才知道, 而它在**这一支**里才有意义: 容器预览那一支
+       * 回答的是"这个应用能不能被摆进别的框里", 它没有"用户正在用这个应用"这回事 ——
+       * 也就没有"边玩边聊"与"邀请一个朋友"。
+       *
+       * 传给它的 `conversationId` 是**应用看到的 `session.context.conversationId`**, 也
+       * 是浮窗默认打开的那一段对话。为空(从分享链接直接进来)不是错误: 那时浮窗先给一份
+       * 会话列表让用户挑。
+       */
+      <HostRuntimeProvider conversationId={session.conversationId ?? undefined}>
       <div className="mx-auto h-full w-full max-w-[520px] overflow-y-auto bg-surface sm:border-x sm:border-line">
         {/*
           胶囊的定位层。三个约束缺一不可:
@@ -390,6 +405,7 @@ export default function AppSession() {
           </ActionSheet>
         )}
       </div>
+      </HostRuntimeProvider>
     )
   }
 

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { ExternalLink, Maximize2, MonitorSmartphone, X } from 'lucide-react'
 import type { SurfaceType, UiView } from '@/api/lap'
+import ApplicationFrame from '@/application-host/ApplicationFrame'
 import { CLIENT_VERSION, clientSupports, embeddedAppOf } from './registry'
 import { isAbsoluteHttpUrl, planSurface, resolveEntry } from './entry'
 
@@ -149,16 +150,16 @@ export default function SurfaceHost({
             </div>
           )
         }
+        // 第三方应用走 `ApplicationFrame` —— 它比一行 iframe 多了三件事: 挂桥、卸载时
+        // 拆桥、以及等应用报到之后收掉加载态(§15)。这一层里**没有**宿主时它会退回成
+        // 与加桥之前逐字节相同的那个 iframe, 所以应用详情页的预览不受影响。
         return (
-          <iframe
-            data-testid="surface-remote-frame"
-            title={title ?? applicationId}
-            src={entry}
-            className="h-full min-h-[24rem] w-full rounded border border-line bg-surface"
-            // 第三方页面拿不到本页的 window 引用, 也带不走 referrer —— 它只该通过
-            // 平台的动作接口做事, 而不是从 DOM 里够到什么。
-            sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
-            referrerPolicy="no-referrer"
+          <ApplicationFrame
+            applicationId={applicationId}
+            sessionId={sessionId}
+            surface={plan.surface}
+            title={title}
+            entry={entry}
           />
         )
       }

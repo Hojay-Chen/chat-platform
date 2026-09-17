@@ -82,3 +82,35 @@ export function planSurface(ui: UiView, requested: SurfaceType): SurfacePlan {
 export function isAbsoluteHttpUrl(entry: string): boolean {
   return /^https?:\/\//i.test(entry)
 }
+
+/**
+ * REMOTE 应用的 entry 必须与宿主**不同源**。这一条不是洁癖, 它是那道 iframe 沙箱的**前提**。
+ *
+ * <h2>为什么同源就等于没有沙箱</h2>
+ *
+ * 承载第三方应用的那张 iframe 上写着 `sandbox="allow-scripts allow-forms allow-same-origin
+ * allow-popups"` —— 其中 `allow-same-origin` 是必需的: 应用要能用自己的 cookie、自己的
+ * `localStorage` 才能记住它自己的登录态。但 `allow-scripts` 与 `allow-same-origin`
+ * **同时**出现、且内容与宿主**同源**时, 那层沙箱就整个不成立了: 应用里的脚本可以
+ * `window.parent.document`, 于是它能读宿主页面上的会话、改写界面、冒充用户 —— 而我们为
+ * 它准备的那套 postMessage 权限模型(`bridge.ts` 里的 SHARE / CHAT_OVERLAY 判定)在这个
+ * 前提下变成一句空话, 因为绕过它比用它省事。
+ *
+ * 所以"不同源"不是对应用作者的礼貌要求, 而是**这套权限模型能被信任的唯一理由**。
+ * 同源的第三方应用不是"少了一层保护", 而是"没有保护"。
+ *
+ * <h2>拿不到宿主的 origin 时判定为通过</h2>
+ *
+ * `hostOrigin` 为空 = 此刻不在浏览器里(静态渲染、测试)。这时**不判** —— 一个在服务端渲染
+ * 时凭空拒绝渲染的组件, 会让 `SurfaceHost` 那 15 条纯渲染断言全部失去意义, 而它们保护的
+ * 恰恰是这同一条分支。真正需要拦住的那种情况(应用被嵌进真实页面)一定发生在浏览器里。
+ */
+export function isCrossOrigin(entry: string, hostOrigin: string): boolean {
+  if (!hostOrigin) return true
+  try {
+    return new URL(entry).origin !== hostOrigin
+  } catch {
+    // 不是一条能解析的地址 —— 那是 `isAbsoluteHttpUrl` 该管的事, 这里不重复报错。
+    return true
+  }
+}
