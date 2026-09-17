@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, Copy, Boxes, Ticket } from 'lucide-react'
 import { cardOf, chatApplications, invitationOf } from '@/api/chatApplications'
+// 封面由平台按名字画 —— 与分享单子用的是同一个函数, 所以同一个人在两个地方看到的
+// 颜色与首字一致。它不是"随便挑一个颜色": 名字一样结果就一样。
+import { coverOf } from '@/application-host/share'
 import type { Message } from '@/types'
 
 /**
@@ -142,6 +145,31 @@ function CardBubble({
   )
 }
 
+/**
+ * 邀请消息 —— **一张卡片, 不是一段话**。
+ *
+ * <h2>它比以前多了什么, 以及为什么</h2>
+ *
+ * 以前它只显示 `content`(那句"点这里加入…" 加一条链接)。那句话是平台生成的, 它必须能
+ * 独立成立 —— 认不出 `APPLICATION_INVITATION` 的旧客户端会把它当普通文本显示, 而那时
+ * 它就是这条消息的全部。但**在那之外**, 一张给收件人看的卡片还该回答三件事:
+ *
+ * <pre>
+ *   是什么应用     name + description + 一张封面(平台按应用名画, 见 coverOf)
+ *   谁邀请我       分享的人写的那句附言(metadata.note)
+ *   点了去哪       joinUrl
+ * </pre>
+ *
+ * 三件都拿不到时(应用下架了、服务端那次额外查询失败、老消息)**整块退回从前的样子** ——
+ * 一张只有链接的卡片仍然是能用的卡片, 而"编一个名字出来"是让它变成错的卡片。
+ *
+ * <h2>封面为什么是画出来的</h2>
+ *
+ * 收件人这一侧的封面由平台按应用名生成, 不是从应用拿一个图片地址。理由在
+ * `application-host/share.ts` 的 `normalizeShare` 里: 一个外部图片地址进了收件人的消息流,
+ * 收件人的 IP、打开时间、看没看这条就全部回报给了那个应用作者 —— 而他与收件人之间没有
+ * 任何关系。首字 + 一个由名字定下来的颜色对任何应用都成立, 且不需要信任任何人。
+ */
 function InvitationBubble({ message }: { message: Message }) {
   const invite = invitationOf(message.metadata)
   const [copied, setCopied] = useState(false)
@@ -164,32 +192,90 @@ function InvitationBubble({ message }: { message: Message }) {
     }
   }
 
+  // 拿不到应用名 → 从前的样子。这一条不是兜底, 而是**老消息的常态**: 服务端是后加的
+  // 那三个字段, 此前铸出的邀请里一个都没有。
+  if (!invite.name) {
+    return (
+      <Shell>
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 rounded-xl bg-accent-soft p-2 text-accent">
+            <Ticket size={16} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-ink">邀请链接</div>
+            <p className="mt-0.5 text-xs leading-relaxed text-ink-faint">{message.content}</p>
+            <InvitationActions copied={copied} link={link} onCopy={copy} />
+          </div>
+        </div>
+      </Shell>
+    )
+  }
+
+  const cover = coverOf(invite.name)
+
   return (
     <Shell>
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 rounded-xl bg-accent-soft p-2 text-accent">
-          <Ticket size={16} />
+        <span
+          className="mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-xl text-lg text-white"
+          style={{ backgroundColor: `hsl(${cover.hue} 55% 45%)` }}
+          aria-hidden
+          data-testid="invitation-cover"
+        >
+          {cover.initial}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="font-medium text-ink">邀请链接</div>
-          <p className="mt-0.5 text-xs leading-relaxed text-ink-faint">{message.content}</p>
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              onClick={copy}
-              className="flex items-center gap-1 rounded-lg bg-accent px-3 py-1 text-xs text-accent-ink transition"
-            >
-              {copied ? <Check size={12} /> : <Copy size={12} />}
-              {copied ? '已复制' : '复制链接'}
-            </button>
-            <a
-              href={link}
-              className="rounded-lg border border-line px-3 py-1 text-xs text-ink-soft transition hover:text-accent"
-            >
-              打开看看
-            </a>
+          <div className="flex items-center gap-2">
+            <span className="truncate font-medium text-ink">{invite.name}</span>
+            <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] text-accent">
+              邀请
+            </span>
           </div>
+          {invite.description && (
+            <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-ink-faint">
+              {invite.description}
+            </p>
+          )}
+          {/*
+            附言是一个人写的话, 所以它有自己的样子(左边一条竖线), 而不是和应用的描述
+            混成一段 —— 收件人要能一眼看出哪句是**人**说的。
+          */}
+          {invite.note && (
+            <p className="mt-1.5 border-l-2 border-accent/40 pl-2 text-xs leading-relaxed text-ink-soft">
+              {invite.note}
+            </p>
+          )}
+          <InvitationActions copied={copied} link={link} onCopy={copy} />
         </div>
       </div>
     </Shell>
+  )
+}
+
+function InvitationActions({
+  copied,
+  link,
+  onCopy,
+}: {
+  copied: boolean
+  link: string
+  onCopy: () => void
+}) {
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <button
+        onClick={onCopy}
+        className="flex items-center gap-1 rounded-lg bg-accent px-3 py-1 text-xs text-accent-ink transition"
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+        {copied ? '已复制' : '复制链接'}
+      </button>
+      <a
+        href={link}
+        className="rounded-lg border border-line px-3 py-1 text-xs text-ink-soft transition hover:text-accent"
+      >
+        打开看看
+      </a>
+    </div>
   )
 }

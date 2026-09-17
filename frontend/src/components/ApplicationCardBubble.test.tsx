@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import ApplicationCardBubble from './ApplicationCardBubble'
 import { cardOf, invitationOf } from '@/api/chatApplications'
+import { coverOf } from '@/application-host/share'
 import type { Message } from '@/types'
 
 /**
@@ -104,6 +105,75 @@ describe('应用卡片消息', () => {
     expect(html).not.toContain('<a ')
   })
 
+  it('邀请消息认得应用名时, 长成一张卡片', () => {
+    // 这三个字段是后加进 metadata 的: 有了它们, 收件人才知道**是什么应用**、以及
+    // **谁在邀请他**。没有它们时那条消息只剩一句平台生成的话加一条链接。
+    const html = render(
+      message({
+        messageKind: 'APPLICATION_INVITATION',
+        content: '邀请你加入「纸飞机」',
+        metadata: {
+          invitationId: 'inv-1',
+          sessionId: 'sess-9',
+          joinUrl: '/join/tok-abc',
+          role: 'MEMBER',
+          applicationId: 'com.example.paper-plane',
+          name: '纸飞机',
+          description: '折一只会飞的纸飞机',
+          note: '来玩吗',
+        },
+      }),
+    )
+    expect(html).toContain('纸飞机')
+    expect(html).toContain('折一只会飞的纸飞机')
+    expect(html).toContain('来玩吗')
+    // 有了名片之后 content 那句就不再重复出现 —— 它和 name/description 说的是同一件事。
+    expect(html).not.toContain('邀请你加入「纸飞机」')
+    expect(html).toContain('href="/join/tok-abc"')
+  })
+
+  it('封面是画出来的, 不是一个外部图片地址', () => {
+    // 这一条是**隐私**断言, 不是样式断言。收件人这一侧的封面必须由平台按名字生成:
+    // 一个外部图片地址进了收件人的消息流, 他的 IP、打开时间、看没看这条就全部回报给了
+    // 那个应用作者, 而他与收件人之间没有任何关系。见 share.ts 的 normalizeShare。
+    const html = render(
+      message({
+        messageKind: 'APPLICATION_INVITATION',
+        content: '邀请你加入「纸飞机」',
+        metadata: {
+          invitationId: 'inv-1',
+          joinUrl: '/join/tok-abc',
+          name: '纸飞机',
+          // 就算有人往 metadata 里塞了封面地址, 这一侧也不该用 —— 它渲染在别人屏幕上。
+          coverUrl: 'https://evil.example/track.png',
+        },
+      }),
+    )
+    expect(html).not.toContain('evil.example')
+    expect(html).not.toContain('<img')
+    expect(html).toContain('data-testid="invitation-cover"')
+    // 颜色与首字来自**共用的** coverOf —— 自己在组件里挑一个颜色的话, 同一个人
+    // 在分享单子和邀请卡片上会看到两种颜色。
+    expect(html).toContain(`hsl(${coverOf('纸飞机').hue} 55% 45%)`)
+    expect(html).toContain(coverOf('纸飞机').initial)
+  })
+
+  it('拿不到应用名时, 邀请消息还是从前那个样子', () => {
+    // 这不是兜底分支, 而是**老消息的常态**: 服务端是后加的那三个字段, 此前铸出的邀请
+    // 一个都没有。所以这条断言钉的是"加了卡片之后, 老消息一个字都没变"。
+    const html = render(
+      message({
+        messageKind: 'APPLICATION_INVITATION',
+        content: '邀请你加入「纸飞机」',
+        metadata: { invitationId: 'inv-1', sessionId: 'sess-9', joinUrl: '/join/tok-abc', role: 'MEMBER' },
+      }),
+    )
+    expect(html).toContain('邀请链接')
+    expect(html).toContain('邀请你加入「纸飞机」')
+    expect(html).not.toContain('data-testid="invitation-cover"')
+    expect(html).toContain('href="/join/tok-abc"')
+  })
+
   it('认不出的 messageKind 什么也不画 —— 由调用方退回普通气泡', () => {
     // 返回 null 而不是"画一个空卡片": 这条消息在一张会画卡片的表里没有位置,
     // 但它在消息流里仍然有位置(Chat.tsx 的 else 分支)。
@@ -156,6 +226,15 @@ describe('聊天侧的前端也不认识任何具体应用', () => {
     'src/pages/me/Reminders.tsx',
     'src/pages/me/Notifications.tsx',
     'src/lib/agentScoped.ts',
+    // 第 8 步: 应用宿主。这一层是**第三方应用说话的地方** —— 平台在这里把应用的动作
+    // 翻成自己的动作, 而"顺手给某个应用开个后门"最可能就发生在这种翻译层里。
+    // `share.ts` 也扫: 它决定分享单子上显示什么, 也就是最可能写死一个应用名的一处。
+    'src/application-host/share.ts',
+    'src/application-host/bridge.ts',
+    'src/application-host/ShareSheet.tsx',
+    'src/application-host/ChatOverlay.tsx',
+    'src/application-host/ApplicationFrame.tsx',
+    'src/application-host/useHostRuntime.tsx',
   ]
 
   /**
