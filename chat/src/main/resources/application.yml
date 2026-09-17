@@ -120,6 +120,14 @@ app:
     # participants.member_id 与 messages.sender_id 的命名空间从 companionId 换成聊天账号 id。
     # **必须在上面那个之后**(@Order 20 vs 10): 它只认已经存在的账号, 没有账号的会话原样跳过。
     backfill-conversation-identities: ${APP_MAINTENANCE_BACKFILL_CONVERSATION_IDENTITIES:false}
+    # 对账: 把两个平台各自记了一半的"这个 Agent 用哪个聊天账号说话"对一遍, 只报不改。
+    # 它不写任何东西, 所以默认开着也不会破坏数据 —— 但两边不一致时它刷出成片的 ERROR,
+    # 而那是一个"该有人看一眼"的信号, 不该混在每次常规重启的输出里被忽略掉。所以同样是
+    # 显式开关。详见 SimulatorDeviceReconciler 的类注释(含两个方向与判据)。
+    reconcile-devices: ${APP_MAINTENANCE_RECONCILE_DEVICES:false}
+    # 对账的宽限期: 配对码过期之后再过多久才允许把一条 PAIRING 记录判成"没有正常结束"。
+    # 必须大于一次一键创建的最坏耗时, 否则一条正在飞的请求会被判成孤儿。
+    reconcile-grace-minutes: ${APP_MAINTENANCE_RECONCILE_GRACE_MINUTES:15}
 
   # ── Simulator(DHCP): 聊天平台持有的仿真客户端接入面 ────────
   simulator:
