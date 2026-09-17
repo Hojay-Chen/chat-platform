@@ -192,7 +192,28 @@ export default function BoardApp({ applicationId, sessionId, surface }: Embedded
     )
   }
 
-  const cellSize = board.side > 10 ? 'h-6 w-6 text-[10px]' : 'h-12 w-12 text-lg'
+  /**
+   * 棋盘的尺寸 —— 格子跟着**轨道**走, 而不是各自定尺。
+   *
+   * <h2>`minmax(0, 1fr)` 配 `w-fit`, 画出来是 15 条横带</h2>
+   *
+   * 原来这里是 `grid w-fit` 加 `repeat(side, minmax(0, 1fr))`, 格子则是定尺的
+   * `h-6 w-6`。`1fr` 在 `w-fit`(即 fit-content)容器里**不**按"平分剩余宽度"结算:
+   * 15 条轨道塌成 21.53px, 而格子自己仍是 24px —— 每格多出来的 2.47px 正好把列间距
+   * 盖掉。量出来的网格是 351×388, 列宽 21.53px, 格子 24px。
+   *
+   * 这个症状之所以难看出来, 是因为它**不对称**: 纵向的轨道高度由内容撑开, 行间距好好
+   * 地在, 横向的被盖住了 —— 一个 15×15 的棋盘看着像 15 条横带, 而不是一张格网。
+   *
+   * 改法是让格子变成 `aspect-square w-full`: 恒等于轨道、恒为正方形。网格自己的宽度
+   * 上限由 `maxWidth` 给出 —— "15 路该密、3 路该疏"是这一层唯一还知道的事情, 而它只是
+   * 一个**上限**, 装不下时轨道自己会缩。
+   *
+   * 顺带修好的第二件事: 15×15 在 375px 的手机上本来就放不下(15×24+28 = 388 > 351)。
+   * 定尺格子会硬溢出, 轨道方案缩到 21.5px 一格, 仍然方方正正。
+   */
+  const cellPx = board.side > 10 ? 24 : 48
+  const cellText = board.side > 10 ? 'text-[10px]' : 'text-lg'
 
   return (
     <div className={shell}>
@@ -220,8 +241,12 @@ export default function BoardApp({ applicationId, sessionId, surface }: Embedded
       {notice && !error && <div className="mb-2 text-xs text-ink-soft">{notice}</div>}
 
       <div
-        className="grid w-fit gap-0.5"
-        style={{ gridTemplateColumns: `repeat(${board.side}, minmax(0, 1fr))` }}
+        className="grid w-full gap-0.5"
+        style={{
+          gridTemplateColumns: `repeat(${board.side}, minmax(0, 1fr))`,
+          // 见上面 `cellPx` —— 这是个上限, 不是定尺: 列间距 (side-1) 条各 2px 也要算进去
+          maxWidth: board.side * cellPx + (board.side - 1) * 2,
+        }}
       >
         {board.cells.map((cell, index) => (
           <button
@@ -229,7 +254,7 @@ export default function BoardApp({ applicationId, sessionId, surface }: Embedded
             type="button"
             disabled={busy || cell !== null}
             onClick={() => move(index)}
-            className={`${cellSize} rounded-sm bg-sunken text-ink disabled:opacity-50`}
+            className={`aspect-square w-full rounded-sm bg-sunken text-ink disabled:opacity-50 ${cellText}`}
           >
             {cell === null || cell === undefined ? '' : String(cell)}
           </button>
