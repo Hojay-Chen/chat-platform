@@ -45,11 +45,15 @@ export default function Capsule({
     <div
       data-testid="mini-capsule"
       /*
-       * `fixed` 而不是 `absolute`: 应用内容可能比视口高(棋盘、长列表), 那时滚动的是
-       * 宿主容器, 胶囊必须留在原地 —— 微信的胶囊也不会跟着内容滚走。
-       * `z-40` 而不是 `z-50`: 面板与浮层是 z-50, 胶囊必须被它们盖住。
+       * 这个组件**不带定位** —— 钉在哪儿由宿主决定, 见 `AppSession`。
+       *
+       * 它曾经是 `fixed right-3 top-3`: 那是按"应用铺满整个视口"写的。桌面端(≥640px)
+       * 小程序改成一条居中的窄列之后, `fixed` 会把胶囊钉到**视口**右上角 —— 离应用的
+       * 右上角可能有一整个屏幕那么远, 看起来像飘在页面外面。
+       *
+       * `z-40` 留着: 浮层与面板是 z-50, 胶囊必须被它们盖住。
        */
-      className="fixed right-3 top-3 z-40 flex items-center overflow-hidden rounded-full border border-line bg-surface/75 shadow-pop backdrop-blur-md"
+      className="z-40 flex items-center overflow-hidden rounded-full border border-line bg-surface/75 shadow-pop backdrop-blur-md"
     >
       <button
         type="button"

@@ -203,11 +203,35 @@ export default function AppSession() {
 
   // ── 形态一: 小程序运行时 ───────────────────────────────────
   //
-  // `overflow-y-auto` 在宿主上, 不在应用上: 应用可能比视口高(棋盘、长列表), 而
-  // 胶囊是 `fixed` —— 滚的是这里, 胶囊留在原地。
+  // `overflow-y-auto` 在宿主上, 不在应用上: 应用可能比视口高(棋盘、长列表), 滚的是
+  // 这里, 胶囊留在原地(`sticky`, 见下)。
+  //
+  // <h2>为什么桌面端是一条居中的窄列</h2>
+  //
+  // 手机上应用铺满整屏就对了 —— 屏幕本来就是窄的。桌面端照搬会得到相反的观感:
+  // 一个 15×15 的棋盘点在大屏左上角, 右边一大片空白, 而胶囊飘在视口最右。
+  //
+  // 微信桌面版的做法是让小程序跑在一个手机宽度的窗口里, 这个平台的其它每一屏也
+  // 已经这么做了(`max-w-[520px]` / `max-w-[600px]`, 见 Contacts 与 Discover)——
+  // 所以小程序运行时跟着同一条规矩, 而不是自成一个例外。
   if (surface === 'FULL_PAGE') {
     return (
-      <div className="relative h-full overflow-y-auto bg-surface">
+      <div className="mx-auto h-full w-full max-w-[520px] overflow-y-auto bg-surface sm:border-x sm:border-line">
+        {/*
+          胶囊的定位层。三个约束缺一不可:
+          - **必须在应用之前**: `sticky` 的元素只在"它本来会被滚出去"时才钉住;
+            放在后面, 它的自然位置在整块内容的下方, 于是它在滚动之前根本不在顶上。
+          - **`h-0`**: 它不占纵向空间, 应用因此仍然从容器最顶上开始 —— 胶囊是浮在
+            应用之上的, 这正是微信的样子。
+          - **`pointer-events-none`**: 这一层横跨整行, 不关掉就会挡住底下应用右上角
+            那一块, 应用里点不动。胶囊自己用 `pointer-events-auto` 收回来。
+        */}
+        <div className="pointer-events-none sticky top-3 z-40 flex h-0 justify-end pr-3">
+          <div className="pointer-events-auto">
+            <Capsule busy={busy} onMore={() => setSheetOpen(true)} onLeave={leave} />
+          </div>
+        </div>
+
         {/*
           刻意不传 `title` 也不传 `onClose` —— `Frame` 里那一行是
           `{title || onClose ? <Chrome/> : null}`, 两个都不给时它就不画头部。
@@ -221,11 +245,11 @@ export default function AppSession() {
           bleed
         />
 
-        <Capsule busy={busy} onMore={() => setSheetOpen(true)} onLeave={leave} />
-
-        {/* 出错了要看得见, 但不能往应用里插一张卡片 —— 所以在下面浮一条 */}
+        {/* 出错了要看得见, 但不能往应用里插一张卡片 —— 所以在下面浮一条。
+            `max-w` + 两侧同时给 inset 再 `mx-auto`, 是让它跟着上面那条窄列居中,
+            而不是横跨整个桌面视口。 */}
         {error && (
-          <div className="fixed inset-x-3 bottom-3 z-40 rounded-lg border border-danger/30 bg-raised px-3 py-2 text-xs leading-5 text-danger shadow-pop">
+          <div className="fixed inset-x-3 bottom-3 z-40 mx-auto max-w-[496px] rounded-lg border border-danger/30 bg-raised px-3 py-2 text-xs leading-5 text-danger shadow-pop">
             {error}
           </div>
         )}
