@@ -33,7 +33,44 @@ cd /home/ubuntu/claude-workspace/chat-platform
 as_build_user "$GRADLE" -q :chat:bootJar
 test -f "$BACKEND_JAR" || { echo "打包失败: $BACKEND_JAR 不存在"; exit 1; }
 
-test -f "$FRONTEND_DIST/index.html" || { echo "缺前端产物 $FRONTEND_DIST —— 先 cd frontend && npm run build"; exit 1; }
+# ── 前端也要在这里构建 ────────────────────────────────────────────────
+#
+# 这一步原先不存在: 脚本只 `test -f dist/index.html`, 然后把 dist 拷到 /var/www。
+# 也就是说 `npm run build` 是**调用方**的责任, 而脚本从不说这件事 —— 于是
+# "改了前端 → 跑 deploy.sh → 部署成功"这条最自然的路径会把**上一次的**产物
+# 发上去。症状是最难查的那一种: 部署全绿、后端是新的、线上前端是旧的, 而你在
+# 浏览器里看到的现象与自己刚改完的代码对不上。写这条注释时刚踩过一次 ——
+# 修好的棋盘 target 在线上不生效, 排查了一圈才发现 dist 是四分钟前的。
+#
+# 仓 2 的 deploy.sh 一直是构建的(D2), 这里补齐, 两个脚本行为对齐。
+# `--skip-build` 保留给"只改 nginx 配置"的场景。
+SKIP_BUILD=0
+for arg in "$@"; do
+  case "$arg" in
+    --skip-build) SKIP_BUILD=1 ;;
+    *) echo "未知参数: $arg"; exit 2 ;;
+  esac
+done
+if [ "$SKIP_BUILD" = "1" ]; then
+  echo "    --skip-build: 用现有 dist, 不重新构建前端"
+  test -f "$FRONTEND_DIST/index.html" || { echo "缺前端产物 $FRONTEND_DIST"; exit 1; }
+else
+  # npm 得解析成绝对路径, 且要把它的目录塞进子进程的 PATH。
+  # 本机 node 是 nvm 装的, 而 nvm 只在**交互式** shell 的 .bashrc 里注入 PATH ——
+  # 部署脚本跑在非登录 shell 里。npm 又是 `#!/usr/bin/env node`, 所以光有绝对路径
+  # 还不够, 子进程还得找得到 node(仓 2 在同一个坑里踩过, 那里也是这么修的)。
+  BUILD_HOME="$(getent passwd "$BUILD_USER" | cut -d: -f6)"
+  NPM="$(command -v npm || true)"
+  if [ -z "$NPM" ]; then
+    # sort -V 而不是字典序 —— 否则 v9 会排在 v24 后面
+    NPM="$(ls -1 "$BUILD_HOME"/.nvm/versions/node/*/bin/npm 2>/dev/null | sort -V | tail -1 || true)"
+  fi
+  [ -n "$NPM" ] && [ -x "$NPM" ] || { echo "找不到 npm —— 装 node, 或把 npm 放进 PATH"; exit 1; }
+  echo "    前端构建 (以 $BUILD_USER, $NPM)"
+  ( cd frontend && as_build_user env "PATH=$(dirname "$NPM"):$PATH" "$NPM" run build ) \
+    || { echo "前端构建失败"; exit 1; }
+  test -f "$FRONTEND_DIST/index.html" || { echo "构建没产出 $FRONTEND_DIST/index.html"; exit 1; }
+fi
 
 echo "==> 2. 前端静态产物 → $WEB_ROOT"
 mkdir -p "$BACKUP_DIR"
