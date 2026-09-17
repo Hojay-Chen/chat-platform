@@ -13,6 +13,7 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * G8 —— 伴侣域请求到底被**哪个处理器**接走。
@@ -85,6 +86,12 @@ class CompanionDomainRoutingTest {
                 {"GET", "/api/companions/c1/persona"},
                 {"POST", "/api/companions/compile"},
                 {"POST", "/api/companions/preview"},
+                // 真人改自己的账号ID —— persons 表只有 8091 有映射, 所以走同一条转发路。
+                // 断言的是 handler 类型: 万一将来有人在 8081 也实现了一个 /api/persons/...,
+                // 它会因为映射更精确而赢过兜底, 这条用例就会红 —— 那正是需要被看见的时刻,
+                // 因为那意味着授权判断被搬到了一个没有 persons 表的进程里。
+                {"GET", "/api/persons/me/handle"},
+                {"PUT", "/api/persons/me/handle"},
         };
         for (String[] c : proxied) {
             assertEquals(CompanionDomainProxyController.class.getSimpleName(), handlerFor(c[0], c[1]),
@@ -117,7 +124,23 @@ class CompanionDomainRoutingTest {
         }
     }
 
-    /** 非伴侣域不受影响 —— 兜底只吃 /api/companions。 */
+    /**
+     * {@code /api/persons} 的**裸路径**刻意不转发。
+     *
+     * <p>8091 在裸 {@code /api/persons} 上没有端点。加那条映射的唯一效果是把一个本该
+     * 干脆的 404 变成一次注定失败的上游往返(以及 8091 缺席时的 502)。断言"没有处理器"
+     * 就是在钉住"这条映射没被顺手加上"。
+     */
+    @Test
+    void the_bare_persons_path_is_deliberately_not_routed() {
+        MockHttpServletRequest req = new MockHttpServletRequest("GET", "/api/persons");
+        req.setRequestURI("/api/persons");
+        ServletRequestPathUtils.parseAndCache(req);
+        assertNull(wac.getBean(RequestMappingHandlerMapping.class).getHandler(req),
+                "裸 /api/persons 不该有任何处理器 —— 8091 那边没有这个端点");
+    }
+
+    /** 非伴侣域不受影响 —— 兜底只吃 /api/companions 与 /api/persons。 */
     @Test
     void other_api_prefixes_are_untouched() throws Exception {
         // 注意别把 /api/v1/memories 写进来 —— 它不存在(旧 route 测试的夹具字符串冒充实端点),

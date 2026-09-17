@@ -16,6 +16,7 @@ import ApplicationDetail from '@/pages/ApplicationDetail'
 import AppSession from '@/pages/AppSession'
 import JoinSession from '@/pages/JoinSession'
 import Me from '@/pages/me/Me'
+import Handle from '@/pages/me/Handle'
 import Reminders from '@/pages/me/Reminders'
 import Notifications from '@/pages/me/Notifications'
 
@@ -96,12 +97,16 @@ export const fullScreenRoutes: RouteObject = {
     { path: '/contacts/agent/:companionId', element: <AgentProfile /> },
     { path: '/contacts/agent/:companionId/settings', element: <AgentSettings /> },
 
-    // 「我」的下一层: 提醒与通知。
+    // 「我」的下一层: 提醒、通知、账号ID。
     //
-    // 它们**不在** tab 那一支, 因为它们不是"一栏", 是「我」里面的两条记录 ——
+    // 它们**不在** tab 那一支, 因为它们不是"一栏", 是「我」里面的几项设置 ——
     // 进去之后底部不该还压着一条 tab bar。微信也是这个形状: 点进「设置」就没有 tab bar 了。
     { path: '/me/reminders', element: <Reminders /> },
     { path: '/me/notifications', element: <Notifications /> },
+    // 改**自己的**账号ID。路径里的 `me` 与后端 `/api/persons/me/handle` 对齐 ——
+    // 那个端点的形状本身就是它的安全性(没有第二个参数可以填错), 路径跟着它走,
+    // 读的人就不会以为这里还能指定改谁
+    { path: '/me/handle', element: <Handle /> },
 
     { path: '/applications/:applicationId', element: <ApplicationDetail /> },
     { path: '/applications/:applicationId/sessions/:sessionId', element: <AppSession /> },

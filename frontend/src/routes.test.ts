@@ -148,9 +148,9 @@ describe('路由表 · 通讯录的下一层', () => {
 })
 
 describe('路由表 · 「我」的下一层', () => {
-  it('提醒与通知在全屏那一支 —— 它们不是"一栏", 进去之后底部不该还有 tab bar', () => {
+  it('提醒、通知、账号ID 在全屏那一支 —— 它们不是"一栏", 进去之后底部不该还有 tab bar', () => {
     const paths = childPaths(fullScreenRoutes)
-    for (const p of ['/me/reminders', '/me/notifications']) {
+    for (const p of ['/me/reminders', '/me/notifications', '/me/handle']) {
       expect(paths, `${p} 丢了`).toContain(p)
     }
     // 反过来也要断言: 挂进 tab 分支的话 tab bar 会一直在, 而且四项会变成六项 ——
@@ -170,6 +170,24 @@ describe('路由表 · 「我」的下一层', () => {
       (p) => p.includes('reminder') || p.includes('notification'),
     )
     expect(under.sort()).toEqual(['/me/notifications', '/me/reminders'])
+  })
+
+  /**
+   * 改自己的账号ID —— 路径里**只有一个 `me`, 没有任何参数**。
+   *
+   * 这一条断言的理由不是"整齐", 是安全: 后端端点是 `/api/persons/me/handle`, userId 从
+   * 已认证身份里取, 调用方**没有机会指定改谁** —— 越权在那个形状下无法被表达。
+   * 一旦前端路径变成 `/me/handle/:personId`, 界面就会开始暗示"可以改别人", 而那个暗示
+   * 迟早会诱使后端跟着加一个 `{id}` 端点, 那正是这个设计刻意消除的入口。
+   *
+   * 所以这里断言的是"带 handle 的路径**恰好只有**这一条", 而不是"它存在" ——
+   * 前者能拦住后来者顺手加一个平行入口。
+   */
+  it('账号ID 页在 /me/ 之下, 且路径里不含参数 —— 它没有"改谁"这个维度', () => {
+    const paths = childPaths(fullScreenRoutes)
+    expect(paths.filter((p) => p.includes('handle'))).toEqual(['/me/handle'])
+    // 与提醒/通知同理: 挂进 tab 分支会让底部一直压着 tab bar, 且四项变五项
+    expect(childPaths(tabRoutes)).not.toContain('/me/handle')
   })
 })
 

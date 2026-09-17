@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { AlarmClock, Bell, ChevronRight, LogOut, Moon, Sun } from 'lucide-react'
+import { AlarmClock, AtSign, Bell, ChevronRight, LogOut, Moon, Sun } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/im/Avatar'
 import { ListRow, SectionHeader } from '@/components/im/ListRow'
@@ -26,6 +26,15 @@ import type { ReactNode } from 'react'
  * (这条与 `Contacts.tsx` 里「添加好友 / 发起群聊」的处理不同: 那两处是**明确标注
  * 「二期」并禁止点击**, 因为用户在通讯录里主动找的就是它们, 缺了会让人以为没有这个能力;
  * 而没人会因为找不到「设置」而认为这个应用不会聊天。)
+ *
+ * <h2>「账号ID」是上面那条规矩的第一个例外</h2>
+ *
+ * 它不是"设置"那一类泛泛的入口, 而是一件**具体**的事: 后端刚刚上线了
+ * `GET/PUT /api/persons/me/handle`, 它只做一件事 —— 改你自己的账号ID。
+ * 所以它挂进来不是因为"该有个设置页了", 而是因为**它现在真的有接口**。
+ *
+ * 它必须挂在这里而不是 Agent 设置页: 那边的主语是那个 Agent, 而 Agent 的账号ID
+ * 由系统分配、不可修改。把"改号"画在一个你改不动的东西的旁边, 是最容易让人误解的排法。
  */
 export default function Me() {
   const navigate = useNavigate()
@@ -66,6 +75,13 @@ export default function Me() {
           leading={<IconTile><Bell size={16} /></IconTile>}
           trailing={<ChevronRight size={16} className="text-ink-faint" />}
           onClick={() => navigate('/me/notifications')}
+        />
+        <ListRow
+          title="账号ID"
+          subtitle="别人靠它找到你，可以改"
+          leading={<IconTile><AtSign size={16} /></IconTile>}
+          trailing={<ChevronRight size={16} className="text-ink-faint" />}
+          onClick={() => navigate('/me/handle')}
         />
       </div>
 
@@ -109,8 +125,8 @@ export default function Me() {
 /**
  * 列表行左边那个 32×32 的图标方块。
  *
- * 抽出来是因为它在"我"这一屏出现了四次(提醒 / 通知 / 主题 / 退出), 而四次里
- * 三次的底色是强调色、一次是红色 —— 靠 `tone` 区分而不是让调用方各写一串 class:
+ * 抽出来是因为它在"我"这一屏出现了五次(提醒 / 通知 / 账号ID / 主题 / 退出), 而五次里
+ * 四次的底色是强调色、一次是红色 —— 靠 `tone` 区分而不是让调用方各写一串 class:
  * 那串 class 里有 `h-8 w-8 grid place-items-center rounded-lg`, 抄错一个字符
  * 就会让某一行的图标歪一格, 而那种歪很难被看出是哪一行的问题。
  */

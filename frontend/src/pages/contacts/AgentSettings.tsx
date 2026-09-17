@@ -6,7 +6,6 @@ import { PanelError, PanelLoading, PanelSection } from '@/components/agent/Panel
 import { Avatar } from '@/components/im/Avatar'
 import { useAgentData } from '@/hooks/useAgentData'
 import { changeSourceZh } from '@/lib/agentLabels'
-import { describeFailure, quotaLabel, type HandleFailure } from '@/lib/handles'
 import { useCompanionStore } from '@/stores/companion'
 import { format } from 'date-fns'
 
@@ -28,47 +27,34 @@ import { format } from 'date-fns'
  */
 interface SettingsBundle {
   agent: Awaited<ReturnType<typeof agentApi.getAgent>>
-  handle: agentApi.HandleView
   lifeEvents: Awaited<ReturnType<typeof agentApi.listLifeEvents>>
   reflections: Awaited<ReturnType<typeof agentApi.listReflections>>
   personaVersions: Awaited<ReturnType<typeof agentApi.listPersonaVersions>>
 }
 
 async function load(companionId: string): Promise<SettingsBundle> {
-  const [agent, handle, lifeEvents, reflections, personaVersions] = await Promise.all([
+  // 账号ID 不在这里单独拉 —— 它就是 `agent.handle`。原先那一次
+  // `GET /api/companions/{id}/handle` 是设置页唯一需要它的地方, 换来的却是同一个值,
+  // 而那个端点已随"Agent 不可改号"一起删除(见 `api/agent.ts` 里那段注释)。
+  const [agent, lifeEvents, reflections, personaVersions] = await Promise.all([
     agentApi.getAgent(companionId),
-    agentApi.getHandle(companionId),
     agentApi.listLifeEvents(companionId),
     agentApi.listReflections(companionId),
     agentApi.listPersonaVersions(companionId),
   ])
-  return { agent, handle, lifeEvents, reflections, personaVersions }
+  return { agent, lifeEvents, reflections, personaVersions }
 }
 
 export default function AgentSettings() {
   const { companionId } = useParams<{ companionId: string }>()
   const navigate = useNavigate()
   const removeCompanion = useCompanionStore((s) => s.remove)
-  const patchCompanion = useCompanionStore((s) => s.patch)
 
   const { data, loading, error, reload } = useAgentData(companionId, load, null)
   const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [actError, setActError] = useState('')
-
-  /**
-   * 账号ID 这一块的状态。
-   *
-   * <p>`handleView` 是**本地覆盖**: 改号成功后后端回的是改动后的配额, 直接用它, 而不是
-   * 重拉整页(那会把下面三栏的人格版本、复盘、时间线一起抖一遍)。它是 null 时回落到
-   * `load()` 拿到的那个 —— 于是"还没改过"与"改过了"走的是同一条渲染路径。
-   */
-  const [handleView, setHandleView] = useState<agentApi.HandleView | null>(null)
-  const [handleInput, setHandleInput] = useState('')
-  const [handleFailure, setHandleFailure] = useState<HandleFailure | null>(null)
-  const [handleOk, setHandleOk] = useState('')
-  const [handleBusy, setHandleBusy] = useState(false)
 
   if (!companionId) {
     return <PanelError message="没有指定联系人" />
@@ -97,8 +83,9 @@ export default function AgentSettings() {
   }
 
   const { agent, lifeEvents, reflections, personaVersions } = data
-  // 改过号就用改完的那一份(后端回的是改动后的配额), 没改过就用加载时读到的
-  const hv = handleView ?? data.handle
+  // 账号ID 直接读 `agent.handle` —— 没有"本地覆盖"那一层, 因为这个值是只读的:
+  // 没有写操作 = 不存在"刚改完还没重拉"的那一小段不一致
+  const handle = agent.handle
 
   /** 所有写操作共用的壳: 清消息、给出错、跑动作、重拉 */
   async function act(fn: () => Promise<void>, ok: string) {
@@ -122,32 +109,6 @@ export default function AgentSettings() {
       await agentApi.updatePersona(id, description.trim())
       setDescription('')
     }, '人格已更新, 它以新的方式理解世界。')
-  }
-
-  /**
-   * 改账号ID。**刻意不走 `act()`** —— 那个壳把所有失败压成一句字符串, 而这里
-   * 400/409/429 各自带着一句只能由后端给出的话(撞上的是哪个号、什么时候能再改)。
-   * 压成一句"修改失败"就等于把这三件事重新变成同一件事, 那正是这个功能要避免的。
-   */
-  async function changeHandle() {
-    const wanted = handleInput.trim()
-    if (!wanted) return
-    setHandleBusy(true)
-    setHandleFailure(null)
-    setHandleOk('')
-    try {
-      const next = await agentApi.updateHandle(id, wanted)
-      setHandleView(next)
-      setHandleInput('')
-      setHandleOk(`账号ID 已改为 ${next.handle}，今年还剩 ${next.remaining} 次修改机会。`)
-      // 通讯录与聊天列表的账号ID 都来自 companion store 那份缓存 —— 不就地改它,
-      // 返回列表时看到的还是旧号(而库里已经是新的了)
-      patchCompanion(id, { handle: next.handle })
-    } catch (e) {
-      setHandleFailure(describeFailure(e))
-    } finally {
-      setHandleBusy(false)
-    }
   }
 
   async function exportMemories() {
@@ -230,57 +191,41 @@ export default function AgentSettings() {
               <div className="flex items-baseline gap-2 rounded-xl border border-line bg-sunken px-3 py-2.5">
                 <span className="text-xs text-ink-faint">当前</span>
                 <span className="select-all font-mono text-sm text-ink">
-                  {hv.handle ?? '（还没有分配）'}
-                </span>
-                <span className="ml-auto shrink-0 text-xs text-ink-faint tnum">
-                  {quotaLabel(hv)}
+                  {handle ?? '（还没有分配）'}
                 </span>
               </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  className="input min-w-0 flex-1 font-mono"
-                  placeholder="新的账号ID，例如 xiaoman"
-                  value={handleInput}
-                  // 一年三次用完时连输入框一起停掉 —— 让用户敲完再撞一次墙是纯粹的浪费
-                  disabled={handleBusy || hv.remaining <= 0}
-                  onChange={(e) => setHandleInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void changeHandle()
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => void changeHandle()}
-                  disabled={handleBusy || hv.remaining <= 0 || !handleInput.trim()}
-                >
-                  {handleBusy ? '正在修改…' : '修改账号ID'}
-                </button>
-              </div>
-
-              {handleOk && (
-                <p className="rounded-xl border border-ok/30 bg-ok/10 px-3 py-2 text-sm text-ok">
-                  {handleOk}
-                </p>
-              )}
 
               {/*
-                失败时把后端的 `hint` 一起显示出来 —— 那句话里有只有后端知道的东西
-                (撞上的是哪个号、什么时候滑出窗口), 前端再写一张映射表只会让它过期。
-                见 `lib/handles.ts` 的 describeFailure。
-              */}
-              {handleFailure && (
-                <p className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-                  {handleFailure.message}
-                  {handleFailure.hint && (
-                    <span className="mt-0.5 block text-xs text-danger/80">{handleFailure.hint}</span>
-                  )}
-                </p>
-              )}
+                这里**没有**输入框, 是故意的 —— 不是"暂时没做", 是这个操作不存在。
+                Agent 的账号ID 由系统分配, 是它的标识而不是它的名字: 一个 Agent 换号会让
+                别人手里那个旧号、消息流水里的 sender_id、以及「agent_ 开头 = 系统发的号」
+                这条一眼可读的规则同时失准。所以服务端把它做成了 403(见
+                PersonService.changeHandle 的类型闸门), 那两个端点也一并删了 —— 界面这边
+                同样不该画一个必然失败的按钮。
 
+                真人自己的账号ID 是可以改的(每年三次), 那个入口在「我的 → 账号ID」。
+              */}
               <p className="text-xs text-ink-faint">
-                只能用字母、数字、下划线(_)和短横线(-)，以字母开头, 6-24 个字符。大写会自动转成小写。
+                账号ID 由系统分配，<span className="text-ink-soft">永久不变</span> ——
+                它是这个 Agent 的标识, 不是可以改的名字。
+                <br />
+                你自己的账号ID 可以改, 在「我的 → 账号ID」。
+              </p>
+
+              {/*
+                「账号ID」与「Agent 平台 ID」是两个不同的东西, 并排放就是为了让这件事
+                在界面上也看得出来: 前者是人念得出来、报得出去的地址; 后者是 agent 平台
+                内部标识这个 agent 个体的值, 只在对接第三方程序时才用得上。
+                把它们混为一谈正是这次要修的那个问题。
+              */}
+              <div className="mt-1 flex items-baseline gap-2 border-t border-line pt-3">
+                <span className="shrink-0 text-xs text-ink-faint">Agent 平台 ID</span>
+                <span className="select-all break-all font-mono text-xs text-ink-faint">
+                  {agent.id}
+                </span>
+              </div>
+              <p className="text-xs text-ink-faint">
+                上面那一行是 agent 平台用来标识它的内部 ID，与账号ID 是两回事。
               </p>
             </PanelSection>
           </section>

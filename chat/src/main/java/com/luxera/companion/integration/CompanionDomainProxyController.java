@@ -92,8 +92,17 @@ public class CompanionDomainProxyController {
      *
      * <p>{@code /api/companions} 本身(列表/创建)也要单列 —— {@code /**} 匹配不到无子路径的
      * 形式。G1 把伴侣 CRUD 迁去了 8091, 8081 没有这个映射。
+     *
+     * <p><b>{@code /api/persons/**}</b>(真人改自己的账号ID, 8091 的
+     * {@code PersonController})也走这里 —— 与伴侣域同一条路, 因为原因完全相同:
+     * {@code persons} 表只有 8091 有映射, 而**授权判断必须在持有数据的一侧做**。
+     * 8081 只把调用者的 JWT 原样转发, 自己不新增任何判断(见类注释里对 confused deputy
+     * 的那段: 8081 若改用服务身份代签, 任何能过它鉴权的请求就都能借服务身份读到别人的东西)。
+     *
+     * <p>只加带 {@code /**} 的那条, **不加**裸 {@code /api/persons} —— 8091 在裸路径上没有
+     * 端点, 加了只会把未知路径静默转发出去, 把 404 变成一个 502。
      */
-    @RequestMapping({"/api/companions", "/api/companions/**"})
+    @RequestMapping({"/api/companions", "/api/companions/**", "/api/persons/**"})
     public void proxy(HttpServletRequest req, HttpServletResponse resp) {
         String target = baseUrl + req.getRequestURI()
                 + (req.getQueryString() == null ? "" : "?" + req.getQueryString());

@@ -231,46 +231,20 @@ export function updatePersona(
 
 // ── 账号ID ──────────────────────────────────────────────────────────
 
-/**
- * 账号ID 的现状 + 改号配额。
+/*
+ * 这里**没有** `getHandle` / `updateHandle`, 是删掉的, 不是漏了。
  *
- * 字段名跟着后端 `HandleView` 走。`nextChangeAt` 只在额度用尽时非空 —— 界面上就是
- * "还能改 N 次" 与 "下次可改 YYYY-MM-DD" 两种状态, 互斥。
+ * 读: Agent 的账号ID 就在 `Companion.handle` 里 —— 它是通讯录每一行都在传的字段。
+ * 原先设置页为它多打的那一次 `GET /api/companions/{id}/handle` 换来的只是同一个值。
+ *
+ * 写: **这个操作不存在**。Agent 的聊天账号ID 由系统分配、永久不变; 服务端的
+ * `PersonService.changeHandle` 用类型闸门把它做成了 403, 8091 那两个端点也一并删了
+ * (见 CompanionController 里那段注释)。所以这里连类型都不声明 —— 让界面**没有机会**
+ * 画出一个必然失败的按钮, 或者一句"今年还剩 3 次修改机会"(配额对 Agent 是死值)。
+ *
+ * 真人自己的账号ID 可以改(每年三次, 滑动窗口), 那套读写与配额在 `api/person.ts`,
+ * 页面在 `pages/me/Handle.tsx`。
  */
-export interface HandleView {
-  handle: string | null
-  /** 最近 365 天内已改次数 */
-  used: number
-  limit: number
-  /** 还能改几次。界面显示这个, **不显示 used** —— 减法在每个调用点做, 总有人做反 */
-  remaining: number
-  nextChangeAt: string | null
-}
-
-/**
- * 读账号ID 与配额。设置页打开时调一次。
- *
- * 与 {@link getAgent} 分开是刻意的: 配额要查流水表, 而 `getAgent` 是通讯录每一行都会
- * 打的东西。把它塞进 `Companion` 等于每列一次通讯录就多算一遍配额。
- */
-export function getHandle(companionId: string): Promise<HandleView> {
-  return api.get<HandleView>(`${base(companionId)}/handle`)
-}
-
-/**
- * 改账号ID。
- *
- * 失败时抛的是 {@link ApiError}, 带 `status`:
- * `400` 形状不对 / `409` 被占用 / `429` 一年三次用完 —— 三种要给三句不同的话,
- * 而它们各自的 `hint` 里就写着该说的那句。所以调用方不要写自己的映射表,
- * 直接把 `hint` 显示出来。
- *
- * 大小写与前后空白由后端归一, 这里**不做**前端预校验: 一份前端副本就是一份会漂移的规则,
- * 而漂移的表现是"前端说可以, 后端说不行"。
- */
-export function updateHandle(companionId: string, handle: string): Promise<HandleView> {
-  return api.put<HandleView>(`${base(companionId)}/handle`, { handle })
-}
 
 // ── 创建流程 ────────────────────────────────────────────────────────
 
