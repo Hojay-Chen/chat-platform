@@ -81,6 +81,18 @@ public class JwtUtil {
         }
     }
 
+    /**
+     * 令牌的过期时刻 —— {@code POST /api/client/login} 拿它回答"这个会话到什么时候为止"。
+     *
+     * <p>刻意<b>不去</b>暴露 {@code expirationMs}(那个值是"新签的令牌活多久", 而这里要回答的是
+     * "**手里这一个**还能用多久")。前端拿已有 JWT 来 login 时, 真正诚实的答案是解出来的
+     * {@code exp}, 而不是 {@code now + expirationMs} —— 后者会把一个马上就要过期的令牌
+     * 报成"还有很久"。
+     */
+    public java.util.Date getExpiration(String token) {
+        return parseClaims(token).getExpiration();
+    }
+
     public boolean isValid(String token) {
         try {
             parseClaims(token);

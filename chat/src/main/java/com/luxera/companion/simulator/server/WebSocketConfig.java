@@ -52,8 +52,14 @@ public class WebSocketConfig {
         }
         ServerEndpointExporter exporter = new ServerEndpointExporter();
         exporter.setServerContainer(container);
-        exporter.setAnnotatedEndpointClasses(SimulatorWebSocketController.class);
-        log.info("[WebSocketConfig] @ServerEndpoint 导出配置完成: /ws/simulator");
+        // V2.2 §6.6: 客户端面的长连接与仿真设备的 WS 走同一个导出器 ——
+        // ServerEndpointExporter 是"把 @ServerEndpoint 注解的类交给容器"的那一步, 它是按类
+        // 注册的, 两个端点各注册一次而不是二选一。漏掉一个的症状是那条路径上永远 404,
+        // 而端点类本身写得完全正确(SimulatorWebSocketController 的注释里记着这同一个坑)。
+        exporter.setAnnotatedEndpointClasses(
+                SimulatorWebSocketController.class,
+                com.luxera.companion.client.ClientStreamEndpoint.class);
+        log.info("[WebSocketConfig] @ServerEndpoint 导出配置完成: /ws/simulator, /api/client/stream");
         return exporter;
     }
 }

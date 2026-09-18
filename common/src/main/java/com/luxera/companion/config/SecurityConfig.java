@@ -97,6 +97,30 @@ public class SecurityConfig {
                         // 它的身份**就是那个码**, 没有别的凭据可给, 所以只能 permitAll;
                         // 防线在控制器里: 逐 IP 的失败次数限流 + 码本身的 10 分钟 TTL。
                         .antMatchers(HttpMethod.POST, "/api/simulator/pair").permitAll()
+                        // V2.2 §6.3 第 1 项: 客户端面的登录。调用方此刻**还没有**令牌(它就是来
+                        // 换令牌的), 所以只能放行 —— 与 /api/auth/login 同一个道理。
+                        //
+                        // permitAll 不等于敞开: ClientSessionService 第一步就是身份解析, 而
+                        // 钥匙不认识/令牌无效一律 401(由 ClientApiExceptionHandler 渲染)。
+                        .antMatchers(HttpMethod.POST, "/api/client/login").permitAll()
+                        // V2.2 §6.5: 为 Agent 铸聊天账号。调用方是本平台的管理密钥, 不是登录用户
+                        // —— JWT 这一层表达不了"平台自己"这个身份, 与 /api/v1/chat/** 同一条理由。
+                        // 留在 anyRequest() 后面的话, 每次铸号请求都会在过滤器上变成 Spring 的
+                        // 默认 403, 连 ClientPrincipalResolver 都见不到。
+                        //
+                        // permitAll 不等于敞开: resolver.resolveAdmin 只认 X-Admin-Key, 一把 cak_
+                        // 客户端钥匙走这里会被 403, 而管理密钥没配的部署上这个端点是 401(不是
+                        // "谁都没带密钥" 那种 401, 而是 ACCESS_ADMIN_DISABLED)。
+                        .antMatchers(HttpMethod.POST, "/api/client/provision").permitAll()
+                        // V2.2 §6.6: 长连接。浏览器的 WebSocket API 发不了自定义请求头, 令牌
+                        // 只能走查询参数 ?token= —— JWT 认证过滤器看不到它, 于是这一层必须放行,
+                        // 由 ClientStreamEndpoint 在握手时自己解令牌(解不开就发一条
+                        // SESSION_EXPIRED 再关, 而不是静默断连)。
+                        //
+                        // 只放行这一个路径而不是整个 /api/client/**: 其余端点走的都是普通的
+                        // Authorization 头, 留在 anyRequest() 后面才有"令牌必须先在 login 那一
+                        // 步换到"这条性质 —— 而它正是 §6.4 要的"Agent 必须像真人一样登录"。
+                        .antMatchers("/api/client/stream").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
