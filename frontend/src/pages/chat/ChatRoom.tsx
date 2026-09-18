@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, MoreHorizontal, RotateCw } from 'lucide-react'
+import { BellRing, ChevronLeft, MoreHorizontal, RotateCw } from 'lucide-react'
 import type { Message } from '@/types'
 import ApplicationCardBubble from '@/components/ApplicationCardBubble'
 import { Avatar } from '@/components/im/Avatar'
@@ -12,6 +12,10 @@ import { groupMessages } from '@/lib/messageGroups'
 import { userStatus } from '@/lib/messageState'
 import { formatTime } from '@/lib/time'
 import { ChatRoomPanel } from './ChatRoomPanel'
+import { ConversationSettings } from './ConversationSettings'
+import { Panel } from '@/components/im/Panel'
+import { settingNote } from '@/lib/notificationSettings'
+import { useConversationStore } from '@/stores/conversations'
 
 /**
  * 聊天室 —— 全屏, 没有 tab bar。
@@ -48,7 +52,17 @@ export default function ChatRoom() {
 
   const [draft, setDraft] = useState('')
   const [panelOpen, setPanelOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  /*
+   * 列表那一份可能比这一页取到的那一份**新** —— 会话设置面板改的就是它。
+   * 有就用它, 没有就退回本页自己 `getConversation` 拿的那一份。
+   *
+   * 这一条不是洁癖: 从通知或分享链接直接点进来时, 列表可能还没加载完, 而 `conv`
+   * 已经有了。两个来源, 取更可信的那个, 而不是把两份数据拼成三份。
+   */
+  const liveRow = useConversationStore((s) => s.list.find((c) => c.id === conversationId))
 
   const rows = useMemo(() => groupMessages(messages), [messages])
 
@@ -97,9 +111,21 @@ export default function ChatRoom() {
     <div className="flex min-h-0 flex-1 flex-col">
       <RoomHeader
         title={conv.peer.name || conv.title}
-        // 「正在输入」压过一切 —— 这是此刻唯一在变的事实
-        subtitle={typing ? '正在输入…' : '仿真 Agent'}
+        /*
+         * 副标题的优先级是一条明确的顺序, 不是"哪个有值显示哪个":
+         * 正在输入 > 这段对话被设了免打扰/置顶 > 一句静态的类型说明。
+         *
+         * 「免打扰」压过静态说明, 是因为它是**你看不见就会出事**的那一个: 用户忘了自己
+         * 设过它, 于是奇怪她怎么一直不回 —— 而线索本来可以一直摆在页头。
+         */
+        subtitle={
+          typing
+            ? '正在输入…'
+            : settingNote(liveRow?.muted ?? conv.muted, liveRow?.pinned ?? conv.pinned) ?? '仿真 Agent'
+        }
+        muted={liveRow?.muted ?? conv.muted}
         onBack={() => navigate('/chat')}
+        onSettings={() => setSettingsOpen(true)}
         onMore={() => navigate(`/contacts/agent/${conv.peer.id}`)}
       />
 
@@ -195,6 +221,15 @@ export default function ChatRoom() {
         conversationId={conv.id}
         onOpened={() => void markRead()}
       />
+
+      {/*
+        会话设置独立成一个面板, 而不是塞进「+」里 —— 「+」问的是"我们做点什么",
+        而这里是"我不想被打扰"。前者是这段关系的用法, 后者是它的边界。
+        两件事放在同一个抽屉里, 找哪一个都要先把另一个读一遍。
+      */}
+      <Panel open={settingsOpen} title="会话设置" onClose={() => setSettingsOpen(false)}>
+        <ConversationSettings conv={conv} />
+      </Panel>
     </div>
   )
 }
@@ -216,12 +251,17 @@ function senderOf(m: Message): BubbleSender {
 function RoomHeader({
   title,
   subtitle,
+  muted = false,
   onBack,
+  onSettings,
   onMore,
 }: {
   title: string
   subtitle: string
+  /** 这一段被设了免打扰 —— 页头画一个划掉的铃, 因为它是"她不会响"的唯一线索。 */
+  muted?: boolean
   onBack: () => void
+  onSettings?: () => void
   onMore?: () => void
 }) {
   return (
@@ -239,6 +279,26 @@ function RoomHeader({
         <div className="truncate text-sm font-medium text-ink">{title}</div>
         {subtitle && <div className="truncate text-[11px] text-ink-faint">{subtitle}</div>}
       </div>
+
+      {onSettings && (
+        <button
+          type="button"
+          onClick={onSettings}
+          title="会话设置"
+          aria-label="会话设置"
+          className="relative grid h-9 w-9 shrink-0 place-items-center rounded-lg text-ink-soft transition-colors hover:bg-sunken hover:text-ink"
+        >
+          {/* 免打扰时不换图标位置, 只在同一个位置上换一个**划掉**的铃 ——
+              图标位置变了会让"那个按钮去哪了"变成一次重新寻找 */}
+          <BellRing size={19} className={muted ? 'text-ink-faint' : ''} />
+          {muted && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute h-px w-4 rotate-45 bg-ink-faint"
+            />
+          )}
+        </button>
+      )}
 
       {onMore && (
         <button

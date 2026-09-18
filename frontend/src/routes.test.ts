@@ -158,6 +158,23 @@ describe('路由表 · 「我」的下一层', () => {
     expect(childPaths(tabRoutes)).not.toContain('/me/reminders')
   })
 
+  /**
+   * 会话免打扰的总览。
+   *
+   * 它与 `/me/notifications` **不是同一件事**, 尽管两个名字里都有"打扰"两个字:
+   * 通知那一页说的是"她主动找过你的时刻"(她发给你的历史), 这一页说的是"你不想被
+   * 这一段打扰"(你设的开关)。混成一条路径的症状是其中一件事从此没有入口 ——
+   * 而两件事都各自有一个静默的故障形态, 都必须能被单独找到。
+   */
+  it('会话免打扰的总览在 /me/ 之下, 且**不是**通知那一页', () => {
+    const paths = childPaths(fullScreenRoutes)
+    expect(paths).toContain('/me/conversations')
+    expect(childPaths(tabRoutes)).not.toContain('/me/conversations')
+    // 它必须在 /me/ 之下: 写成 `/conversations` 也能跑, 症状是这一页没有入口能到,
+    // 而 `/chat` 那一支下面又不能挂静态子路由(见上一条), 所以两条路都不通
+    expect(paths.filter((p) => p.startsWith('/conversations'))).toEqual([])
+  })
+
   it('/me 本身仍然是 tab, 不是重定向 —— 「我」是一栏, 不是一条记录', () => {
     const me = (tabRoutes.children ?? []).find((c) => c.path === '/me')
     expect(me).toBeDefined()

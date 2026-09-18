@@ -56,6 +56,17 @@ module.exports = {
         warn: 'rgb(var(--warn) / <alpha-value>)',
         danger: 'rgb(var(--danger) / <alpha-value>)',
 
+        // ── 事件的三种类别 ──────────────────
+        // V2.2 §5.2 的三个能力接口。仓 1 这边**用不到它们画画**(聊天前端不展示
+        // 认知链), 但 token 与仓 2 逐字保留同一份 —— 两个前端属于同一个产品,
+        // 少三项的后果是下次同步时没人知道该不该补(与 bubble-* 同一个理由)。
+        /** A 持续影响 */
+        'cat-effect': 'rgb(var(--cat-effect) / <alpha-value>)',
+        /** B 实时感官 */
+        'cat-sensory': 'rgb(var(--cat-sensory) / <alpha-value>)',
+        /** C 计划表 */
+        'cat-schedule': 'rgb(var(--cat-schedule) / <alpha-value>)',
+
         // ── IM 气泡 ─────────────────────────
         'bubble-in': 'rgb(var(--bubble-in) / <alpha-value>)',
         'bubble-out': 'rgb(var(--bubble-out) / <alpha-value>)',

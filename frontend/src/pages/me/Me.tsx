@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { AlarmClock, AtSign, Bell, ChevronRight, LogOut, Moon, Sun } from 'lucide-react'
+import { AlarmClock, AtSign, Bell, BellOff, ChevronRight, LogOut, Moon, Sun } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/im/Avatar'
 import { ListRow, SectionHeader } from '@/components/im/ListRow'
@@ -35,6 +35,16 @@ import type { ReactNode } from 'react'
  *
  * 它必须挂在这里而不是 Agent 设置页: 那边的主语是那个 Agent, 而 Agent 的账号ID
  * 由系统分配、不可修改。把"改号"画在一个你改不动的东西的旁边, 是最容易让人误解的排法。
+ *
+ * <h2>「会话免打扰」为什么也在这里</h2>
+ *
+ * 它与上面「通知」那一行看着像一件事, 其实是两个方向: 「通知」说的是**她找过你**,
+ * 「会话免打扰」说的是**你不想被这一段打扰**。两个都在「我」这一屏, 是因为主语都是
+ * 用户自己, 而不是任何一段对话。
+ *
+ * 它列的是**同一份数据**的另一面 —— 聊天室页头那个铃铛打开的是其中一段。多这一页
+ * 不是因为"设置该有个汇总", 而是因为那个铃铛的故障形态是**静默的**: 用户设过免打扰,
+ * 忘了, 然后奇怪她怎么一直不回。一页能一眼扫完的列表是那件事唯一的线索。
  */
 export default function Me() {
   const navigate = useNavigate()
@@ -58,7 +68,7 @@ export default function Me() {
       </div>
 
       <SectionHeader label="我的" />
-      {/* 两行共用一个圆角容器, 中间由 `divide-y` 画发丝线 —— 微信的分组就是这个形状:
+      {/* 几行共用一个圆角容器, 中间由 `divide-y` 画发丝线 —— 微信的分组就是这个形状:
           组内不画外框, 只在行之间画线。用 `divide-y` 而不是给第二行加 `border-t`,
           是因为这样加第三行时不用记得给每一行都补边框 */}
       <div className="mx-3 divide-y divide-line overflow-hidden rounded-xl border border-line bg-raised">
@@ -75,6 +85,13 @@ export default function Me() {
           leading={<IconTile><Bell size={16} /></IconTile>}
           trailing={<ChevronRight size={16} className="text-ink-faint" />}
           onClick={() => navigate('/me/notifications')}
+        />
+        <ListRow
+          title="会话免打扰"
+          subtitle="我把谁静音了、谁被置顶了"
+          leading={<IconTile><BellOff size={16} /></IconTile>}
+          trailing={<ChevronRight size={16} className="text-ink-faint" />}
+          onClick={() => navigate('/me/conversations')}
         />
         <ListRow
           title="账号ID"
@@ -125,8 +142,8 @@ export default function Me() {
 /**
  * 列表行左边那个 32×32 的图标方块。
  *
- * 抽出来是因为它在"我"这一屏出现了五次(提醒 / 通知 / 账号ID / 主题 / 退出), 而五次里
- * 四次的底色是强调色、一次是红色 —— 靠 `tone` 区分而不是让调用方各写一串 class:
+ * 抽出来是因为它在"我"这一屏出现了六次(提醒 / 通知 / 会话免打扰 / 账号ID / 主题 / 退出),
+ * 而六次里五次的底色是强调色、一次是红色 —— 靠 `tone` 区分而不是让调用方各写一串 class:
  * 那串 class 里有 `h-8 w-8 grid place-items-center rounded-lg`, 抄错一个字符
  * 就会让某一行的图标歪一格, 而那种歪很难被看出是哪一行的问题。
  */
