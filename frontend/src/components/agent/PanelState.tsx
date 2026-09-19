@@ -15,6 +15,44 @@ export function PanelLoading({ label = '加载中…' }: { label?: string }) {
 }
 
 /**
+ * 骨架屏的一根条。
+ *
+ * <h2>为什么不是一个转圈</h2>
+ *
+ * 一个圈只说"在忙", 不说"忙完了会出来什么"。骨架按**最终布局的形状**摆, 于是内容
+ * 到位时不会有跳动 —— 眼睛已经知道该看哪儿了。这是应用那几屏(市场、详情、会话)
+ * 原先只有一句「正在加载…」的那一处的问题: 那句字既不是形状, 也不说会出来什么。
+ *
+ * 它自己不含 `aria` 语义 —— 读屏该听到的是外层那一句"正在加载", 而不是一排空盒子。
+ */
+export function Skeleton({ className = '' }: { className?: string }) {
+  return <span aria-hidden className={`skeleton ${className}`} />
+}
+
+/**
+ * 一列骨架行 —— 头像 + 两行字 + 右侧一小块。
+ *
+ * 三种应用列表(参与者、可分享的人、可以开的应用)都是这个形状, 所以它被摆在这里
+ * 一次, 而不是每屏各写一遍。
+ */
+export function SkeletonRows({ rows = 3, avatar = false }: { rows?: number; avatar?: boolean }) {
+  return (
+    <div className="space-y-2" aria-hidden>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 rounded-lg border border-line px-3 py-2.5">
+          {avatar && <Skeleton className="h-9 w-9 shrink-0 rounded-lg" />}
+          <span className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className="h-3 w-2/5" />
+            <Skeleton className="h-2.5 w-3/5" />
+          </span>
+          <Skeleton className="h-6 w-14 shrink-0 rounded-lg" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
  * 面板级的错误。**不复用页面级的错误条** —— 页面级那一条带「知道了」和重试,
  * 而这里只是一块数据没拿到, 说清楚哪一块就够了, 给一个点了重拉整页的按钮是过度反应。
  */

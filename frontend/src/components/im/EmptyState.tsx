@@ -18,7 +18,12 @@ export function EmptyState({ icon, title, hint, action }: {
     <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
       {icon && <div className="mb-1 text-ink-faint">{icon}</div>}
       <p className="text-sm text-ink-soft">{title}</p>
-      {hint && <p className="max-w-xs text-xs leading-relaxed text-ink-faint">{hint}</p>}
+      {/*
+        `text-pretty`(`text-wrap: pretty`)不是装饰: 这一行限宽 20rem, 中文又长, 末行
+        经常只剩两三个字 —— 实测「…这里没有一张写死的 / 清单。」就是这样。它让浏览器
+        在断行时把末行的孤字考虑进去。改在这一处, 所有空状态一起受益。
+      */}
+      {hint && <p className="max-w-xs text-pretty text-xs leading-relaxed text-ink-faint">{hint}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>
   )

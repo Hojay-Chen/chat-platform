@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
-import { lap, LapError, newIdempotencyKey, type ResourceView } from '@/api/lap'
+import { Grid3x3, Play, RefreshCw } from 'lucide-react'
+import { lap, describeLapError, newIdempotencyKey, type ResourceView } from '@/api/lap'
+import { EmptyState } from '@/components/im/EmptyState'
+import { PanelError, Skeleton } from '@/components/agent/PanelState'
 import type { EmbeddedAppProps } from '@/surfaces/registry'
 // 填模板这件事平台已经有一个函数了, 而且是同一条规矩(只替换那两个变量, 认不出的原样
 // 留着)。资源 URI 模板与 entry 模板是同一种字符串, 所以复用而不是再写一个。
@@ -55,6 +57,16 @@ export default function BoardApp({ applicationId, sessionId, surface }: Embedded
 
   const [resource, setResource] = useState<ResourceView | null>(null)
   const [busy, setBusy] = useState(false)
+  /**
+   * 第一次读有没有回来。
+   *
+   * <h2>为什么它与 `busy` 必须是两个值</h2>
+   *
+   * 只有 `busy` 的时候, 进屏的第一帧就是"还没读到"的样子 —— 于是"这一场还没有棋盘"
+   * 会先闪一下, 再被真的棋盘顶掉。那句话是一个**结论**, 而当时它还没成立:
+   * 用户看到的是"这里空的", 半秒后棋盘出现了, 中间那一下让他怀疑自己看错了。
+   */
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -98,6 +110,7 @@ export default function BoardApp({ applicationId, sessionId, surface }: Embedded
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
+      setLoading(false)
     }
   }, [sessionId])
 
@@ -122,8 +135,9 @@ export default function BoardApp({ applicationId, sessionId, surface }: Embedded
     } catch (e) {
       // 被拒是常态(不该你走、格子有人、这一场已结束) —— 平台的 error.code 就是答案,
       // 界面的责任是把它原样摆出来, 而不是翻译成一句"操作失败"。
-      if (e instanceof LapError) setError(`${e.code} — ${e.message}`)
-      else setError(e instanceof Error ? e.message : String(e))
+      // `describeLapError` 保留这条: 业务码照旧连码带话一起摆, 只丢掉 `HTTP_*` 那种
+      // 传输层的码 —— 那个不是"平台的答案", 是我们自己没连上。
+      setError(describeLapError(e))
     } finally {
       setBusy(false)
     }
@@ -167,27 +181,70 @@ export default function BoardApp({ applicationId, sessionId, surface }: Embedded
       if (response.resource) setResource(response.resource)
       else await load()
     } catch (e) {
-      if (e instanceof LapError) setError(`${e.code} — ${e.message}`)
-      else setError(e instanceof Error ? e.message : String(e))
+      setError(describeLapError(e))
     } finally {
       setBusy(false)
     }
   }
 
+  /**
+   * 第一次读还没回来 —— 摆一个**棋盘形状**的骨架。
+   *
+   * 三路的九宫格是这里唯一诚实的形状: 这一层在读到资源之前不知道该是几路几
+   * (见 `squareSide` 的类注释), 而九宫格是两种棋盘里最保守的那个。
+   */
+  if (loading) {
+    return (
+      <div className={shell} aria-busy aria-label="正在读这一场的棋盘">
+        <div className="mb-3 flex items-center gap-3">
+          <Skeleton className="h-3.5 w-20" />
+          <Skeleton className="h-3.5 w-14" />
+        </div>
+        <div
+          className="grid w-full gap-0.5"
+          style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', maxWidth: 3 * 48 + 2 * 2 }}
+        >
+          {Array.from({ length: 9 }, (_, i) => (
+            <Skeleton key={i} className="aspect-square w-full rounded-sm" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   if (!board) {
     return (
-      <div className={`text-sm text-ink-soft ${shell}`}>
-        <p>这一场还没有棋盘。</p>
-        <div className="mt-3 flex items-center gap-2">
-          <button type="button" onClick={create} disabled={busy} className="btn-primary">
-            开一局
-          </button>
-          <button type="button" onClick={load} disabled={busy} className="btn-ghost">
-            <RefreshCw size={14} />
-            再读一次
-          </button>
-        </div>
-        {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+      <div className={shell}>
+        {/*
+          空态要说的是"怎么把它填上" —— 原来是一句「这一场还没有棋盘。」配两个按钮,
+          没有任何一句解释这两个按钮会做什么、为什么会有"还没有棋盘"这种情况。
+        */}
+        <EmptyState
+          icon={<Grid3x3 size={28} />}
+          title="这一场还没有棋盘"
+          hint={
+            target
+              ? '点「开一局」就会在这一场里摆一张新的 —— 之后所有进这一场的人看到的都是同一张。'
+              : '这个应用没有声明资源模板, 平台不知道该在哪里摆这张棋盘; 读不到模板不影响已经存在的棋盘。'
+          }
+          action={
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={create} disabled={busy} className="btn-primary text-xs">
+                <Play size={13} />
+                开一局
+              </button>
+              <button type="button" onClick={load} disabled={busy} className="btn-ghost text-xs">
+                <RefreshCw size={13} />
+                再读一次
+              </button>
+            </div>
+          }
+        />
+        {error && (
+          <div className="mt-2">
+            <PanelError message={error} />
+          </div>
+        )}
       </div>
     )
   }
@@ -219,14 +276,22 @@ export default function BoardApp({ applicationId, sessionId, surface }: Embedded
     <div className={shell}>
       <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-ink-soft">
         <span>
-          轮到 <span className="text-ink">{turn ? String(turn) : '—'}</span>
+          轮到{' '}
+          <span className="font-mono text-ink" title="现在是哪一位的回合">
+            {turn ? String(turn) : '—'}
+          </span>
         </span>
         {winner ? (
-          <span className="text-accent">
+          <span className="font-medium text-accent">
             {winner === 'DRAW' ? '平局' : `${String(winner)} 胜`}
           </span>
         ) : null}
-        <span className="text-ink-faint">version {resource?.version}</span>
+        {/* `version` 是资源自己的版本号(每次落子 +1), 用等宽数字 —— 它每走一步就变 */}
+        {resource?.version !== undefined && (
+          <span className="text-ink-faint">
+            版本 <span className="tnum">{resource.version}</span>
+          </span>
+        )}
         <button type="button" onClick={load} disabled={busy} className="btn-ghost !px-2 !py-0.5">
           <RefreshCw size={12} />
           刷新
@@ -234,11 +299,20 @@ export default function BoardApp({ applicationId, sessionId, surface }: Embedded
       </div>
 
       {error && (
-        <div className="mb-2 rounded border border-danger/30 bg-danger/10 px-3 py-1.5 text-xs text-danger">
-          {error}
+        <div className="mb-2">
+          <PanelError message={error} />
         </div>
       )}
-      {notice && !error && <div className="mb-2 text-xs text-ink-soft">{notice}</div>}
+      {/*
+        平台回了 SUCCESS 之外的某个状态 —— 少见, 但**不能什么都不说**:
+        原来它把枚举原文(`response.status`)直接印在屏幕上, 一个 SUCCESS 之外的
+        值就这样裸着出现在中文句子里。现在它是一句话里被引用到的那个值。
+      */}
+      {notice && !error && (
+        <div className="mb-2 rounded-lg border border-warn/30 bg-warn/10 px-3 py-1.5 text-xs text-warn">
+          这一手没有生效 —— 平台说这个动作的状态是 <span className="font-mono">{notice}</span>。
+        </div>
+      )}
 
       <div
         className="grid w-full gap-0.5"
@@ -248,17 +322,37 @@ export default function BoardApp({ applicationId, sessionId, surface }: Embedded
           maxWidth: board.side * cellPx + (board.side - 1) * 2,
         }}
       >
-        {board.cells.map((cell, index) => (
-          <button
-            key={index}
-            type="button"
-            disabled={busy || cell !== null}
-            onClick={() => move(index)}
-            className={`aspect-square w-full rounded-sm bg-sunken text-ink disabled:opacity-50 ${cellText}`}
-          >
-            {cell === null || cell === undefined ? '' : String(cell)}
-          </button>
-        ))}
+        {board.cells.map((cell, index) => {
+          const filled = cell !== null && cell !== undefined
+          /**
+           * 每一格的读屏名字 —— 一个内容为空、只有背景色的按钮对读屏用户是不存在的。
+           * 说法用行列而不是序号: "第 7 格"要求人在心里把一维序号折成二维坐标,
+           * 而棋盘恰恰是按行列读的。
+           */
+          const row = Math.floor(index / board.side) + 1
+          const col = (index % board.side) + 1
+          return (
+            <button
+              key={index}
+              type="button"
+              disabled={busy || filled}
+              onClick={() => move(index)}
+              aria-label={
+                filled ? `第 ${row} 行第 ${col} 列, ${String(cell)}` : `第 ${row} 行第 ${col} 列, 空`
+              }
+              /*
+                有子的格子与空格子长得要不一样 —— 原来两者只差一个字符, 而空格子
+                在禁用之后还会再淡一次, 于是"我下过这里"与"这里还能下"要靠读字来分。
+                现在空格子有 hover(能下的地方会亮起来), 有子的格子有底色。
+              */
+              className={`aspect-square w-full rounded-sm text-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 ${cellText} ${
+                filled ? 'bg-line/70 font-medium' : 'bg-sunken enabled:hover:bg-line disabled:opacity-50'
+              }`}
+            >
+              {filled ? String(cell) : ''}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

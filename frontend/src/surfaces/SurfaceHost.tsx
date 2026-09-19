@@ -1,7 +1,16 @@
 import type { ReactNode } from 'react'
-import { ExternalLink, Maximize2, MonitorSmartphone, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  Blocks,
+  FileWarning,
+  Maximize2,
+  MonitorSmartphone,
+  X,
+} from 'lucide-react'
 import type { SurfaceType, UiView } from '@/api/lap'
 import ApplicationFrame from '@/application-host/ApplicationFrame'
+import { Hint } from '@/components/ui/Hint'
 import { CLIENT_VERSION, clientSupports, embeddedAppOf } from './registry'
 import { isAbsoluteHttpUrl, planSurface, resolveEntry } from './entry'
 
@@ -80,8 +89,17 @@ export default function SurfaceHost({
     return (
       <Frame surface={surface} className={className} bleed={bleed} onClose={onClose} testId="surface-host">
         <Notice
+          tone="warn"
+          icon={<AlertTriangle size={15} />}
           title="需要更新的客户端"
-          body={`这个应用要求客户端 ${ui.minClientVersion}, 当前是 ${CLIENT_VERSION}。`}
+          body={`它要求客户端 ${ui.minClientVersion}, 当前是 ${CLIENT_VERSION}。`}
+          hint={
+            <>
+              「最低客户端版本」是应用作者写的"这份界面至少要哪个版本的客户端才看得懂"。
+              版本比不过时宁可拒绝渲染, 也不硬着头皮画一个自己看不懂的入口模板 —— 后者在白屏那里
+              才暴露, 而白屏什么信息都不给人留下。
+            </>
+          }
         />
       </Frame>
     )
@@ -108,7 +126,8 @@ export default function SurfaceHost({
     >
       {plan.fallback && (
         <p className="mb-2 text-xs text-ink-faint" data-testid="surface-fallback-note">
-          这个应用没有为 {plan.requested} 提供入口, 已按 {plan.surface} 打开。
+          这个应用没有准备「{surfaceName(plan.requested)}」这种打开方式, 已按
+          「{surfaceName(plan.surface)}」打开。
         </p>
       )}
       {inner}
@@ -125,8 +144,9 @@ export default function SurfaceHost({
           return (
             <div data-testid="surface-unregistered">
               <Notice
-                title="这个应用没有内置界面"
-                body={`平台没有 ${applicationId} 的界面实现, 但它的动作仍然可以调用。`}
+                icon={<Blocks size={15} />}
+                title="这个应用没有自带的界面"
+                body={`平台里没有为 ${applicationId} 画界面的实现, 但它的动作照样能点 —— 下面这些就是。`}
               />
               {fallback}
             </div>
@@ -144,8 +164,17 @@ export default function SurfaceHost({
           return (
             <div data-testid="surface-remote-invalid">
               <Notice
-                title="远程应用的入口不是绝对地址"
-                body={`REMOTE 应用的 entry 必须是一条绝对 http(s) 地址, 现在是 "${entry}"。这份清单有问题, 已拒绝加载。`}
+                tone="danger"
+                icon={<FileWarning size={15} />}
+                title="这个应用的入口写错了, 已拒绝加载"
+                body={`入口必须是一条完整的 http(s) 地址, 清单里写的是 "${entry}"。`}
+                hint={
+                  <>
+                    这条入口会被放进承载第三方应用的那个 iframe 的 src。写成相对路径的话,
+                    浏览器会在**本站**里找这个页面 —— 结果是一个 404 的空框, 而且没人看得出
+                    是哪一步错了。清单由应用作者发布, 改它要改应用那一侧。
+                  </>
+                }
               />
             </div>
           )
@@ -168,12 +197,17 @@ export default function SurfaceHost({
         return (
           <div data-testid="surface-native">
             <Notice
-              title="这是一个原生应用"
-              body={`网页版打不开 ${applicationId} 的原生界面。在支持的客户端里用这个入口: ${entry}`}
+              icon={<MonitorSmartphone size={15} />}
+              title="手机里打开这个应用, 网页版打不开"
+              body="在支持这种客户端的设备上用它, 网页版只能把入口给到你。"
             />
-            <p className="mt-2 flex items-center gap-1 text-xs text-ink-faint">
-              <MonitorSmartphone size={13} />
-              {entry}
+            {/*
+              深链接原样摆在下面 —— 它是一个能复制走的东西, 而不是要读的一句话。
+              等宽 + 可选中: 手抄一串 url 是最容易抄错的一类操作。
+            */}
+            <p className="mt-2 flex select-all items-center gap-1.5 rounded-lg bg-sunken px-3 py-2 font-mono text-[11px] text-ink-soft">
+              <ArrowUpRight size={12} className="shrink-0 text-ink-faint" />
+              <span className="min-w-0 break-all">{entry}</span>
             </p>
           </div>
         )
@@ -181,11 +215,34 @@ export default function SurfaceHost({
       default:
         return (
           <div data-testid="surface-unknown-mode">
-            <Notice title="认不出的界面模式" body={`平台不认识 ui.type = ${String(ui.type)}。`} />
+            <Notice
+              tone="warn"
+              icon={<AlertTriangle size={15} />}
+              title="认不出这是哪种打开方式"
+              body={`平台不认识 ui.type = ${String(ui.type)}, 所以不知道该把它摆成什么。`}
+            />
           </div>
         )
     }
   }
+}
+
+/**
+ * Surface 类型的中文名。
+ *
+ * 用户看到的那句话里不该出现 `FULL_PAGE` / `PANEL` 这种值 —— 它们是清单里的**枚举**,
+ * 是写给平台读的。应用作者在开发者那一屏看的是原值, 而用户读到的是"侧边栏"。
+ */
+const SURFACE_NAMES: Record<SurfaceType, string> = {
+  FULL_PAGE: '整页',
+  EMBEDDED: '嵌在页面里',
+  MODAL: '弹出窗口',
+  PANEL: '侧边栏',
+  INLINE: '一行',
+}
+
+function surfaceName(type: SurfaceType): string {
+  return SURFACE_NAMES[type] ?? String(type)
 }
 
 // ─────────────────────────── 五种外框 ───────────────────────────
@@ -234,7 +291,7 @@ function Frame({
           {...attrs}
           className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 ${className ?? ''}`}
         >
-          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-2xl">
+          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-pop">
             <Chrome title={title} onClose={onClose} closeLabel="关闭" />
             <div className="overflow-auto p-4">{children}</div>
           </div>
@@ -242,10 +299,13 @@ function Frame({
       )
 
     case 'PANEL':
+      // `shadow-pop` 而不是 `shadow-2xl`: 全项目只有 `pop` 一个阴影 token(见
+      // tailwind.config.js), 而 `shadow-2xl` 是 Tailwind 的默认值 —— 它绕过了那套
+      // token, 于是面板的投影与浮窗、胶囊的投影不是同一种光。
       return (
         <div
           {...attrs}
-          className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-line bg-surface shadow-2xl ${className ?? ''}`}
+          className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-line bg-surface shadow-pop ${className ?? ''}`}
         >
           <Chrome title={title} onClose={onClose} closeLabel="收起" />
           <div className="overflow-auto p-4">{children}</div>
@@ -255,8 +315,11 @@ function Frame({
     case 'EMBEDDED':
       // 嵌在别人的页面里 —— 所以**没有**关闭按钮, 也**没有**标题栏:
       // 这块地方的主人不是我, 在我这块里放一个"关掉整个面板"的按钮是越权。
+      //
+      // `bg-raised` 而不是 `bg-surface/60`: 后者是"页面底色再透一点", 画在页面上
+      // 等于没有底色 —— 一块既没有边界也没有面的地方读起来不像"一块地方"。
       return (
-        <div {...attrs} className={`rounded-lg border border-line bg-surface/60 p-3 ${className ?? ''}`}>
+        <div {...attrs} className={`rounded-xl border border-line bg-raised p-4 ${className ?? ''}`}>
           {children}
         </div>
       )
@@ -265,7 +328,7 @@ function Frame({
       return (
         <div
           {...attrs}
-          className={`flex items-center gap-3 rounded border border-line bg-surface/60 px-3 py-2 ${className ?? ''}`}
+          className={`flex items-center gap-3 rounded-lg border border-line bg-raised px-3 py-2 ${className ?? ''}`}
         >
           <div className="min-w-0 flex-1 truncate">{children}</div>
           {onExpand && (
@@ -304,14 +367,17 @@ function Chrome({
   closeLabel: string
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-      <span className="truncate text-sm text-ink">{title ?? ''}</span>
+    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-3">
+      {/* 标题缺省时不留一条空栏 —— 没有 title 又给了 onClose 的调用点(容器预览里
+          的几种)会得到一条只有关闭按钮的细栏, 而不是一条写着空白的粗栏。 */}
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{title ?? ''}</span>
       {onClose && (
         <button
           type="button"
           onClick={onClose}
           className="btn-ghost shrink-0 !px-2 !py-1"
           title={closeLabel}
+          aria-label={closeLabel}
           data-testid="surface-close"
         >
           <X size={15} />
@@ -321,14 +387,53 @@ function Chrome({
   )
 }
 
-function Notice({ title, body }: { title: string; body: string }) {
+/**
+ * 平台替应用说的一句话 —— "它没做界面"、"它的入口写错了"、"它要更新的客户端"。
+ *
+ * <h2>它原先的问题有三个, 都不是措辞问题</h2>
+ *
+ * 1. **图标是错的**: 五种完全不同的情形共用一个 `ExternalLink` —— 一个"版本不够"配
+ *    一个"在新窗口打开"的图标, 读的人第一眼就被指向了错的地方。
+ * 2. **没有轻重**: "这个应用没有自带界面"(正常, 往下走就行)与"入口写错了"(清单坏了)
+ *    长得一模一样, 于是前者也被画成了坏消息。
+ * 3. **正文是一段文档**: 讲的是"为什么 platform 这样设计", 而站在这一屏的人要问的是
+ *    "那我现在能怎么办"。所以解释进了 `?`, 留在外面的是结论与下一步。
+ */
+function Notice({
+  tone = 'info',
+  icon,
+  title,
+  body,
+  hint,
+}: {
+  tone?: 'info' | 'warn' | 'danger'
+  icon: ReactNode
+  title: string
+  body: string
+  /** 「为什么它这样」那一段 —— 见 `Hint` 的类注释。不给就不画那个 `?`。 */
+  hint?: ReactNode
+}) {
+  const skin =
+    tone === 'danger'
+      ? 'border-danger/30 bg-danger/10'
+      : tone === 'warn'
+        ? 'border-warn/30 bg-warn/10'
+        : 'border-line bg-sunken/50'
+  const iconSkin =
+    tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn' : 'text-ink-faint'
+
   return (
-    <div className="rounded border border-line bg-sunken/40 p-4 text-sm text-ink-soft">
-      <div className="flex items-center gap-2 text-ink">
-        <ExternalLink size={14} />
-        {title}
+    <div className={`rounded-xl border px-4 py-3.5 ${skin}`}>
+      <div className="flex items-center gap-2">
+        <span className={`shrink-0 ${iconSkin}`}>{icon}</span>
+        <span className="min-w-0 flex-1 text-sm font-medium text-ink">{title}</span>
+        {hint && (
+          <Hint label="为什么会这样" align="end">
+            {hint}
+          </Hint>
+        )}
       </div>
-      <p className="mt-1">{body}</p>
+      <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">{body}</p>
     </div>
   )
 }

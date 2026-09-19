@@ -218,6 +218,26 @@ export interface JoinResponse {
   capabilities: string[]
 }
 
+/**
+ * 没有信封时, 按 HTTP 状态给一句**人话**。
+ *
+ * 这一条是补一个实测出来的坑: 网关(nginx / Authelia)直接回的错误**不是**平台的
+ * `{status, error:{code, message}}` 信封, 于是走到下面那个退回分支 —— 而那个分支
+ * 原来把 `message` 写成 `undefined`, `LapError` 再把 message 兜到 code 上, 最后
+ * 页面渲染 `${code} — ${message}` 就得到 **"HTTP_403 — HTTP_403"**: 同一个字符串
+ * 印两遍, 一个字的信息都没有。六个页面(`Discover` / `ApplicationDetail` /
+ * `AppSession` / `JoinSession` / `apps/board` ×2)都在渲染那一行, 所以修在这里一处,
+ * 六处一起好。
+ *
+ * 401/403 单独说 —— 它不是"请求失败", 是**票没了**, 用户该做的事完全不同。
+ */
+function httpFallbackMessage(status: number): string {
+  if (status === 401 || status === 403) return '登录已失效 —— 重新登录即可。'
+  if (status === 404) return '这个地址不存在 —— 它可能已经下架了。'
+  if (status >= 500) return `服务端出错了 (HTTP ${status}) —— 稍后再试。`
+  return `请求失败 (HTTP ${status})。`
+}
+
 export class LapError extends Error {
   readonly code: string
   readonly status: string
@@ -227,6 +247,26 @@ export class LapError extends Error {
     this.status = status
     this.code = error.code
   }
+}
+
+/**
+ * 把 `LapError` 变成一行给用户看的话。
+ *
+ * `HTTP_403` 是**传输层**的码 —— 把它印在句子前面, 等于把网线露给用户看。实测的
+ * 原文是 "HTTP_403 — HTTP_403"; 修掉重复之后仍然读作
+ * "HTTP_403 — 登录已失效 —— 重新登录即可。"。只有当码是平台自己的**业务码**时
+ * (`APPLICATION_NOT_FOUND`、`CELL_TAKEN` 这种)它才真的带信息, 那时才配上: 排查的
+ * 人需要它, 而用户读到的仍然是一句完整的话 —— `apps/board.tsx` 里"被拒是常态,
+ * 界面的责任是把平台的答案原样摆出来"那条, 说的正是这种码, 这里没有推翻它。
+ *
+ * 六个页面共用这一行, 所以它只能有一处定义 —— 同一句话在六个地方各写一遍,
+ * 下次改文案必漏几个。
+ */
+export function describeLapError(e: unknown): string {
+  if (e instanceof LapError) {
+    return e.code.startsWith('HTTP_') ? e.message : `${e.code} — ${e.message}`
+  }
+  return e instanceof Error ? e.message : String(e)
 }
 
 async function send<T>(method: string, url: string, body?: unknown, key?: string): Promise<T> {
@@ -243,7 +283,15 @@ async function send<T>(method: string, url: string, body?: unknown, key?: string
   })
 
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+  // **不能直接 `JSON.parse`**: 502/504 这类由网关直接回的错页是 HTML, 解析会抛
+  // `SyntaxError` —— 于是用户看到的是"Unexpected token < in JSON", 而不是"服务端没起来"。
+  // 那恰恰是最需要一句人话的时候。解析不了就当没有信封, 走下面的状态码分支。
+  let data: unknown = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    data = null
+  }
 
   if (!res.ok) {
     // 平台把失败原因放在 error.code / error.message 里; 没有信封时退回 HTTP 状态。
@@ -253,7 +301,9 @@ async function send<T>(method: string, url: string, body?: unknown, key?: string
     }
     throw new LapError(String(res.status), {
       code: 'HTTP_' + res.status,
-      message: typeof data === 'string' ? data : undefined,
+      // 纯文本体就原样用它(后端偶尔这么回); 否则按状态码给一句人话 —— 两种都**不会**
+      // 让 message 空着, 空着就会被 LapError 兜成 code, 页面于是印两遍同一个字符串。
+      message: typeof data === 'string' && data ? data : httpFallbackMessage(res.status),
     })
   }
   return data as T

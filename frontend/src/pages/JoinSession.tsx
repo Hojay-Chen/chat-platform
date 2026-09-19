@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Ticket } from 'lucide-react'
-import { lap, LapError, type JoinResponse } from '@/api/lap'
+import { lap, describeLapError, type JoinResponse } from '@/api/lap'
+import { roleZh } from '@/lib/agentLabels'
 
 /**
  * 「分享链接加入页」—— `/join/{token}`。
@@ -30,10 +31,7 @@ export default function JoinSession() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const report = useCallback((e: unknown) => {
-    if (e instanceof LapError) setError(`${e.code} — ${e.message}`)
-    else setError(e instanceof Error ? e.message : String(e))
-  }, [])
+  const report = useCallback((e: unknown) => setError(describeLapError(e)), [])
 
   useEffect(() => {
     if (attempted.current || !token) return
@@ -80,12 +78,18 @@ export default function JoinSession() {
 
         {joined && !error && (
           <p className="mt-3 text-sm text-ink-soft">
-            已作为 {joined.role} 加入 —— 正在打开现场…
+            {/* `role` 是后端枚举(OWNER/MEMBER/…) —— 原来它裸着出现在中文句子里 */}
+            已作为「{roleZh(joined.role)}」加入 —— 正在打开现场…
           </p>
         )}
 
         <div className="mt-6">
-          <Link to="/applications" className="btn-ghost">
+          {/*
+            这一条指过 `/applications`, 而那是个只做重定向的旧地址(路由表里
+            `{ path: '/applications', element: <Navigate to="/discover" /> }`)。
+            直接指到 `/discover`, 少一跳, 也不会在地址栏里闪一下旧路径。
+          */}
+          <Link to="/discover" className="btn-ghost">
             <ArrowLeft size={14} />
             去应用市场
           </Link>

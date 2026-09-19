@@ -1,5 +1,5 @@
 /**
- * Agent 域里那些「后端说英文、界面说中文」的对照表。
+ * 后端说英文、界面说中文 —— 全站的对照表都在这一个文件里。
  *
  * <h2>为什么集中在一个文件</h2>
  *
@@ -10,6 +10,13 @@
  *
  * 未知值**不抛错、不吞掉**, 原样显示 —— 这是这份界面里所有 `Record<string,string>`
  * 对照表的统一约定。
+ *
+ * <h2>后半段是应用域(LAP)的</h2>
+ *
+ * 它原先只覆盖伴侣域, 于是应用那几屏(会话面板、应用详情、容器预览)直接把
+ * `OWNER` / `ACTIVE` / `EXECUTE` / `FULL_PAGE` 印在了中文句子中间 —— 一句话里两种语言
+ * 混着, 是那几屏"看着没做完"的一半原因。搬到这里来而不是在页面里就地写一张表:
+ * 同样的 `status` 在会话、参与者、邀请三处各有一套取值, 就地写三张表迟早会不一致。
  */
 
 // ── 记忆 ────────────────────────────────────────────────────────────
@@ -122,4 +129,128 @@ const CHANGE_SOURCE_ZH: Record<string, string> = {
 export function changeSourceZh(source: string | null | undefined): string {
   if (!source) return ''
   return CHANGE_SOURCE_ZH[source] ?? source
+}
+
+// ── 应用域: 参与者、邀请、会话 ───────────────────────────────────────
+//
+// 取值来自后端契约(`contracts/application/PrincipalType.java`,
+// `contracts/chat/ParticipantView.java` 等), 不是照界面猜的。
+
+/** 这一位是谁。`EXTERNAL_AGENT` 与 `AGENT` 的区别是"平台托管的还是在平台外的"。 */
+const PRINCIPAL_TYPE_ZH: Record<string, string> = {
+  HUMAN: '真人',
+  AGENT: '数字人',
+  EXTERNAL_AGENT: '外来程序',
+  SYSTEM: '平台',
+  APPLICATION: '应用',
+}
+
+export function principalTypeZh(type: string | null | undefined): string {
+  if (!type) return ''
+  return PRINCIPAL_TYPE_ZH[type] ?? type
+}
+
+/** 在这一场里的身份。决定默认能做什么, 所以它该被读成人话。 */
+const ROLE_ZH: Record<string, string> = {
+  OWNER: '主人',
+  MEMBER: '成员',
+  PARTICIPANT: '成员',
+  OBSERVER: '旁观',
+}
+
+export function roleZh(role: string | null | undefined): string {
+  if (!role) return ''
+  return ROLE_ZH[role] ?? role
+}
+
+/** 参与者的状态。`LEFT` 是人自己走的, `REMOVED` 是被请出去的 —— 两件事不一样。 */
+const PARTICIPANT_STATUS_ZH: Record<string, string> = {
+  ACTIVE: '在场',
+  LEFT: '已离开',
+  REMOVED: '已被请出',
+}
+
+export function participantStatusZh(status: string | null | undefined): string {
+  if (!status) return ''
+  return PARTICIPANT_STATUS_ZH[status] ?? status
+}
+
+/** 邀请的状态。`CONSUMED` 是"被用掉了", `REVOKED` 是"被主人收回了"。 */
+const INVITATION_STATUS_ZH: Record<string, string> = {
+  CREATED: '还没人用',
+  CONSUMED: '已用掉',
+  EXPIRED: '已过期',
+  REVOKED: '已收回',
+}
+
+export function invitationStatusZh(status: string | null | undefined): string {
+  if (!status) return ''
+  return INVITATION_STATUS_ZH[status] ?? status
+}
+
+/** 会话的状态。 */
+const SESSION_STATUS_ZH: Record<string, string> = {
+  ACTIVE: '进行中',
+  ENDED: '已结束',
+  EXPIRED: '已过期',
+  PENDING: '等待中',
+}
+
+export function sessionStatusZh(status: string | null | undefined): string {
+  if (!status) return ''
+  return SESSION_STATUS_ZH[status] ?? status
+}
+
+// ── 应用域: 应用自己的清单 ──────────────────────────────────────────
+
+/** §18 的三种界面模式 —— 应用这一侧的界面是平台画的、远端画的、还是原生客户端画的。 */
+const UI_MODE_ZH: Record<string, string> = {
+  EMBEDDED: '平台内置',
+  REMOTE: '应用自己提供',
+  NATIVE: '原生客户端',
+}
+
+export function uiModeZh(mode: string | null | undefined): string {
+  if (!mode) return ''
+  return UI_MODE_ZH[mode] ?? mode
+}
+
+/** §67 的五种呈现方式。用户在界面上读到的是这五个词, 不是五个枚举值。 */
+const SURFACE_TYPE_ZH: Record<string, string> = {
+  FULL_PAGE: '整页',
+  EMBEDDED: '嵌在页面里',
+  MODAL: '弹出窗口',
+  PANEL: '侧边栏',
+  INLINE: '一行',
+}
+
+export function surfaceTypeZh(type: string | null | undefined): string {
+  if (!type) return ''
+  return SURFACE_TYPE_ZH[type] ?? type
+}
+
+/** 动作要求的权限档。`EXECUTE` 是"它真的会去改东西", 这一档值得被看见。 */
+const PERMISSION_LEVEL_ZH: Record<string, string> = {
+  READ: '只读',
+  WRITE: '可写入',
+  EXECUTE: '可执行',
+}
+
+export function permissionLevelZh(level: string | null | undefined): string {
+  if (!level) return ''
+  return PERMISSION_LEVEL_ZH[level] ?? level
+}
+
+/** 动作的风险档。名字本身就是"要不要拦一下"的答案。 */
+const RISK_LEVEL_ZH: Record<string, string> = {
+  NONE: '无风险',
+  LOW: '低',
+  MEDIUM: '中',
+  HIGH: '高',
+  CRITICAL: '极高',
+}
+
+export function riskLevelZh(level: string | null | undefined): string {
+  if (!level) return ''
+  return RISK_LEVEL_ZH[level] ?? level
 }

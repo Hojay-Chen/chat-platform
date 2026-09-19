@@ -142,8 +142,10 @@ export default function ShareSheet({ share, sessionId, onSent, onCancel }: Share
           </div>
         </div>
 
-        {/* 搜索框。空查询时列出全部 —— 打开面板的第一眼必须是"我有哪些人"。 */}
-        <div className="flex items-center gap-2 border-b border-line px-4 py-2">
+        {/* 搜索框。空查询时列出全部 —— 打开面板的第一眼必须是"我有哪些人"。
+            边框在**聚焦时**变色: 这个输入框自己没有边框(`outline-none`), 不给父级一个
+            `focus-within` 的话, 键盘用户在这一层看不到任何"现在在这儿"的指示。 */}
+        <div className="flex items-center gap-2 border-b border-line px-4 py-2 transition-colors focus-within:border-accent">
           <Search size={14} className="shrink-0 text-ink-faint" />
           <input
             value={query}
@@ -168,7 +170,7 @@ export default function ShareSheet({ share, sessionId, onSent, onCancel }: Share
                   type="button"
                   onClick={() => setTarget(active ? null : c.id)}
                   aria-pressed={active}
-                  className={`flex w-full items-center gap-3 px-4 py-2 text-left transition ${
+                  className={`flex w-full items-center gap-3 px-4 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 ${
                     active ? 'bg-accent-soft' : 'hover:bg-sunken/60'
                   }`}
                 >
@@ -208,7 +210,7 @@ export default function ShareSheet({ share, sessionId, onSent, onCancel }: Share
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-soft transition hover:text-ink"
+              className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-soft transition hover:bg-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
             >
               取消
             </button>
@@ -216,7 +218,7 @@ export default function ShareSheet({ share, sessionId, onSent, onCancel }: Share
               type="button"
               onClick={() => void submit()}
               disabled={!selected || busy}
-              className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-1.5 text-xs text-accent-ink transition disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-1.5 text-xs text-accent-ink transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-raised disabled:opacity-40"
               data-testid="share-send"
             >
               <Send size={12} />

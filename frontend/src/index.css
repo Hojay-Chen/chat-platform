@@ -98,6 +98,26 @@
     background: rgb(var(--accent) / 0.22);
   }
   /**
+   * 断行。两件事:
+   * - 标题 `balance` —— 不让最后一行只剩一个词(「正在看有什么可以玩…」这类短句
+   *   折成两行时尤其明显)
+   * - 正文 `pretty` —— 不把标点或单个字挤到下一行
+   * 不支持的浏览器直接忽略这两条, 所以它不会成为任何一处的前提。
+   */
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  /** 「?」的三角小标记由浏览器画, 但它在 summary 上会破坏圆形的形状 */
+  summary {
+    list-style: none;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+  /**
    * 时间戳、未读数、ID 一律等宽数字。
    * 这是"科技感"最省的一处兑现: 数字不跳, 列表就不会在轮询刷新时抖动。
    */
@@ -129,8 +149,20 @@
    * 这 12 个语义类吸收了全站约 79 处调用点 —— 改定义就等于改那 79 处。
    * 它们现在指向语义 token, 于是自动获得双主题。
    */
+  /**
+   * 按钮的共用骨架。
+   *
+   * `focus-visible:` 那一串不是装饰 —— 这一层原先**一个焦点指示都没有**, 于是整站的
+   * 按钮对键盘用户是不可见的: tab 一路按下去, 屏幕上没有任何东西告诉你现在在哪儿。
+   * 用 `focus-visible` 而不是 `focus`: 鼠标点按钮不该留一圈蓝边, 键盘进来才该有。
+   *
+   * `active:scale-[0.98]` 是"按下去"的手感。`transition`(而不是 `transition-colors`)
+   * 才带得上 transform —— 时长取 theme 里的 DEFAULT(150ms)。
+   */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-medium transition-colors select-none;
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-medium transition select-none
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface
+           active:scale-[0.98];
   }
   .btn-primary {
     @apply btn bg-accent text-accent-ink hover:bg-accent/90;
@@ -176,7 +208,50 @@
 
   /** 列表行的统一骨架 —— 会话行、联系人行、群聊行、成员行共用 */
   .row-base {
-    @apply flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors;
+    @apply flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors
+           focus-visible:outline-none focus-visible:bg-sunken focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent/40;
+  }
+
+  /**
+   * 骨架屏的一根条 —— 见 `components/agent/PanelState.tsx` 的 `Skeleton`。
+   *
+   * 用 `bg-line` 而不是 `bg-sunken`: 亮色下 sunken(#F4F5F7) 与页面底色只差一点,
+   * 骨架会看不见 —— 而一个看不见的加载态与没有加载态是同一件事。
+   * 呼吸用项目已有的 `pulseSoft`, 不引新的动画。
+   */
+  .skeleton {
+    @apply block animate-pulseSoft rounded-md bg-line;
+  }
+
+  /**
+   * 「?」说明 —— 见 `components/ui/Hint.tsx`。
+   *
+   * 用原生 `<details>` 而不是自己写 hover 状态: 键盘能展开、读屏会念出它是可展开的,
+   * 而且它不需要 JS —— 上面那几个页面的断言全是 `renderToStaticMarkup`, 一个靠
+   * `onMouseEnter` 才出现的浮层在那里是**看不见**的。
+   */
+  .hint {
+    @apply relative inline-block align-middle;
+  }
+  .hint > summary {
+    @apply grid h-4 w-4 cursor-help list-none place-items-center rounded-full border border-line text-ink-faint transition-colors;
+  }
+  .hint > summary:hover,
+  .hint[open] > summary {
+    @apply border-line-strong text-ink;
+  }
+  .hint > summary:focus-visible {
+    @apply outline-none ring-2 ring-accent/40 ring-offset-1 ring-offset-surface;
+  }
+  .hint > .hint-body {
+    @apply absolute left-0 top-6 z-30 hidden w-64 max-w-[calc(100vw-3rem)] rounded-lg border border-line bg-raised px-3 py-2 text-xs font-normal leading-relaxed text-ink-soft shadow-pop;
+  }
+  .hint[open] > .hint-body {
+    @apply block;
+  }
+  /** 靠右的元素上用它 —— 见 Hint 的 `align` */
+  .hint-end > .hint-body {
+    @apply left-auto right-0;
   }
 
   /** TabBar 的一项。窄屏在底部横排, 宽屏在左侧竖排 —— 同一个组件两套 class */

@@ -256,8 +256,13 @@ export function HostRuntimeProvider({
         />
       )}
 
+      {/* `shadow-pop` 而不是 `shadow-lg` —— 它是浮层, 而全项目只有 `pop` 一个阴影 token
+          (见 tailwind.config.js)。`shadow-lg` 是 Tailwind 的默认值, 绕过了那套 token。 */}
       {toast && (
-        <div className="pointer-events-none fixed bottom-24 left-1/2 z-[80] -translate-x-1/2 rounded-full bg-ink/90 px-4 py-2 text-xs text-surface shadow-lg">
+        <div
+          role="status"
+          className="pointer-events-none fixed bottom-24 left-1/2 z-[80] -translate-x-1/2 rounded-full bg-ink/90 px-4 py-2 text-xs text-surface shadow-pop"
+        >
           {toast}
         </div>
       )}

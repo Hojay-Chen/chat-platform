@@ -35,11 +35,15 @@ export default function ActionSheet({
       data-testid="mini-sheet"
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
     >
+      {/*
+        遮罩。聚焦时给一圈贴边的指示 —— 它是键盘路径上第一个能 Tab 到的元素,
+        而一个占满屏幕、点了会关掉面板的东西**必须**看得出来现在在它上面。
+      */}
       <button
         type="button"
         aria-label="收起"
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-scrim/40"
+        className="absolute inset-0 cursor-default bg-scrim/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50"
       />
       <div className="animate-fadeUp relative flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-line bg-raised shadow-pop sm:rounded-2xl">
         <header className="shrink-0 border-b border-line px-4 py-3">

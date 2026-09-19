@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, MessageSquare, Minus, X } from 'lucide-react'
 import ApplicationCardBubble from '@/components/ApplicationCardBubble'
+import { Skeleton } from '@/components/agent/PanelState'
 import { Avatar } from '@/components/im/Avatar'
 import { Composer } from '@/components/im/Composer'
 import { MessageBubble, TimeSeparator, type BubbleSender } from '@/components/im/MessageBubble'
@@ -91,10 +92,15 @@ function MinimizedBar({
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-[60] flex items-center gap-2 rounded-full border border-line bg-raised py-1.5 pl-3 pr-1.5 shadow-xl"
+      className="fixed bottom-4 right-4 z-[60] flex items-center gap-2 rounded-full border border-line bg-raised py-1.5 pl-3 pr-1.5 shadow-pop"
       data-testid="chat-overlay-minimized"
     >
-      <button type="button" onClick={onExpand} className="flex items-center gap-2 text-sm text-ink">
+      <button
+        type="button"
+        onClick={onExpand}
+        title="展开聊天"
+        className="flex items-center gap-2 rounded-full text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      >
         <MessageSquare size={15} className="text-accent" />
         <span className="max-w-[10rem] truncate">
           {conv ? conv.peer.name || conv.title : '聊天'}
@@ -109,7 +115,8 @@ function MinimizedBar({
         type="button"
         onClick={onClose}
         title="关掉聊天浮窗"
-        className="rounded-full p-1 text-ink-faint transition hover:text-ink"
+        aria-label="关掉聊天浮窗"
+        className="rounded-full p-1 text-ink-faint transition hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         data-testid="chat-overlay-close"
       >
         <X size={13} />
@@ -137,7 +144,7 @@ function ExpandedWindow({
 }) {
   return (
     <div
-      className="fixed bottom-4 right-4 z-[60] flex h-[min(520px,calc(100vh-2rem))] w-[min(360px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl"
+      className="fixed bottom-4 right-4 z-[60] flex h-[min(520px,calc(100vh-2rem))] w-[min(360px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-pop"
       data-testid="chat-overlay"
       data-mode="EXPANDED"
     >
@@ -181,7 +188,7 @@ function Picker({
               key={c.id}
               type="button"
               onClick={() => onPick(c.id)}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-sunken/60"
+              className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-sunken/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40"
             >
               <Avatar name={c.peer.name || c.title} kind="agent" size={30} />
               <span className="min-w-0 flex-1">
@@ -237,7 +244,15 @@ function Room({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-3">
         {loading && !conv ? (
-          <p className="p-4 text-center text-xs text-ink-faint">加载中…</p>
+          /*
+            骨架而不是「加载中…」—— 这里出来的是**一列气泡**, 所以骨架就摆成气泡:
+            左一条、右一条、左一条。一句话给不出任何形状, 数据到位时整块换掉。
+          */
+          <div className="space-y-3" aria-busy aria-label="正在读这一段对话">
+            <Skeleton className="h-9 w-2/3 rounded-2xl" />
+            <Skeleton className="ml-auto h-9 w-1/2 rounded-2xl" />
+            <Skeleton className="h-9 w-3/5 rounded-2xl" />
+          </div>
         ) : rows.length === 0 ? (
           <p className="p-4 text-center text-xs text-ink-faint">还没有消息。说点什么吧。</p>
         ) : (
@@ -285,7 +300,11 @@ function Room({
       {error && (
         <div className="mx-2.5 mb-1.5 flex items-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-2.5 py-1.5 text-[11px] text-danger">
           <span className="min-w-0 flex-1">{error}</span>
-          <button type="button" onClick={() => setError('')} className="shrink-0 underline">
+          <button
+            type="button"
+            onClick={() => setError('')}
+            className="shrink-0 rounded underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          >
             知道了
           </button>
         </div>
@@ -329,7 +348,8 @@ function OverlayHeader({
         type="button"
         onClick={onMinimize}
         title="缩起来"
-        className="rounded p-1 text-ink-faint transition hover:text-ink"
+        aria-label="缩起来"
+        className="rounded p-1 text-ink-faint transition hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         data-testid="chat-overlay-minimize"
       >
         <Minus size={15} />
@@ -338,7 +358,8 @@ function OverlayHeader({
         type="button"
         onClick={onClose}
         title="关掉聊天浮窗"
-        className="rounded p-1 text-ink-faint transition hover:text-ink"
+        aria-label="关掉聊天浮窗"
+        className="rounded p-1 text-ink-faint transition hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         data-testid="chat-overlay-close"
       >
         <ChevronDown size={16} />

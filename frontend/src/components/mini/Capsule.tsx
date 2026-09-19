@@ -38,8 +38,12 @@ export default function Capsule({
   onLeave: () => void
   busy?: boolean
 }) {
+  /*
+   * `focus-visible:ring-inset` 而不是普通 ring: 胶囊是 `overflow-hidden rounded-full`,
+   * 画在外面的那一圈会被裁掉 —— 而那正是"键盘用户什么都看不见"的老问题。
+   */
   const btn =
-    'grid h-8 w-11 place-items-center text-ink-soft transition-colors hover:bg-sunken hover:text-ink disabled:opacity-40'
+    'grid h-8 w-11 place-items-center text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 disabled:opacity-40'
 
   return (
     <div

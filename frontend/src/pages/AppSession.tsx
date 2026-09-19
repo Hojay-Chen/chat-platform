@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Check, Copy, Layers, LogOut, Trash2, UserPlus, Users } from 'lucide-react'
 import {
   lap,
-  LapError,
+  describeLapError,
   type ApplicationDetail,
   type InvitationView,
   type MintedInvitation,
@@ -16,6 +16,16 @@ import Capsule from '@/components/mini/Capsule'
 import { HostRuntimeProvider } from '@/application-host/useHostRuntime'
 import ActionSheet, { SheetSection } from '@/components/mini/ActionSheet'
 import { ListRow } from '@/components/im/ListRow'
+import { PanelError, Skeleton } from '@/components/agent/PanelState'
+import { Hint } from '@/components/ui/Hint'
+import {
+  invitationStatusZh,
+  participantStatusZh,
+  principalTypeZh,
+  roleZh,
+  sessionStatusZh,
+  surfaceTypeZh,
+} from '@/lib/agentLabels'
 
 /**
  * 一场应用会话 —— 也就是**小程序跑起来的地方**。
@@ -79,10 +89,7 @@ export default function AppSession() {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
-  const report = useCallback((e: unknown) => {
-    if (e instanceof LapError) setError(`${e.code} — ${e.message}`)
-    else setError(e instanceof Error ? e.message : String(e))
-  }, [])
+  const report = useCallback((e: unknown) => setError(describeLapError(e)), [])
 
   const load = useCallback(async () => {
     try {
@@ -185,19 +192,37 @@ export default function AppSession() {
 
   // ── 还没加载出来 ──
   // 这一屏在两种形态下都是同一段 —— 所以放在分支之前, 不重复两遍。
+  //
+  // 加载态用骨架而不是一句「正在加载会话…」: 这一屏最终是一个占满视口的应用, 一句
+  // 居中的小字说完之后整屏换掉, 眼睛得重新找一遍位置。骨架按最终形状摆(顶部一栏 +
+  // 中间一块), 到位时就不算跳。
   if (!session || !detail) {
+    if (error) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-3 bg-surface px-6 text-center">
+          <PanelError message={error} />
+          <Link to="/discover" className="btn-outline text-xs">
+            回发现
+          </Link>
+        </div>
+      )
+    }
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 bg-surface px-6 text-center">
-        {error ? (
-          <>
-            <p className="text-sm text-danger">{error}</p>
-            <Link to="/discover" className="btn-outline text-xs">
-              回发现
-            </Link>
-          </>
-        ) : (
-          <p className="text-sm text-ink-faint">正在加载会话…</p>
-        )}
+      <div
+        className="mx-auto flex h-full w-full max-w-[520px] flex-col gap-3 px-4 py-4"
+        aria-busy
+        aria-label="正在加载会话"
+      >
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-8 w-8 rounded-lg" />
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="ml-auto h-8 w-24 rounded-full" />
+        </div>
+        <Skeleton className="h-40 w-full rounded-xl" />
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-2/3" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
       </div>
     )
   }
@@ -231,7 +256,18 @@ export default function AppSession() {
        * 会话列表让用户挑。
        */
       <HostRuntimeProvider conversationId={session.conversationId ?? undefined}>
-      <div className="mx-auto h-full w-full max-w-[520px] overflow-y-auto bg-surface sm:border-x sm:border-line">
+      {/*
+        这一层是"桌面端让应用跑在一条手机宽的列里", 所以它**只有宽度约束** —— 没有边框。
+
+        它曾经带着 `sm:border-x sm:border-line`。那两条竖线画在列的两侧, 而列的右边
+        什么都没有(桌面端剩下的是一片页面底色), 于是右边那条看着不像分隔, 像一条
+        凭空多出来的竖线 —— 用户的原话是「为什么最右边还有分层竖线」。左边那条同理。
+
+        边框在这里本来也不承担任何信息: 列的边界由"内容到这儿就没了"表达, 而不是由
+        一条线把这块地方框成一个"层"。小程序运行时那一支的整个目的, 就是让应用不像
+        "网页里的一块"(见 Capsule 的类注释)。
+      */}
+      <div className="mx-auto h-full w-full max-w-[520px] overflow-y-auto bg-surface">
         {/*
           胶囊的定位层。三个约束缺一不可:
           - **必须在应用之前**: `sticky` 的元素只在"它本来会被滚出去"时才钉住;
@@ -272,50 +308,77 @@ export default function AppSession() {
         {sheetOpen && (
           <ActionSheet
             title={detail.name || appId}
-            subtitle={`这一场 ${sessionId.slice(0, 8)}… · ${session.status}`}
+            subtitle={`${sessionStatusZh(session.status)} · ${session.participantCount} 人在这一场`}
             onClose={() => setSheetOpen(false)}
           >
-            <SheetSection label={`参与者 · ${session.participantCount}`}>
-              {participants.map((p) => (
-                <ListRow
-                  key={p.participantId}
-                  leading={
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-sunken text-ink-faint">
-                      <Users size={15} />
-                    </span>
-                  }
-                  // 主键是技术标识 —— 用等宽, 否则那一串随机字符会随比例字体左右抖
-                  title={<span className="font-mono text-[13px]">{p.principalId}</span>}
-                  subtitle={`${p.principalType} · ${p.role} · ${p.status}`}
-                />
-              ))}
+            <SheetSection label={`谁在这一场 · ${session.participantCount}`}>
+              {participants.length === 0 ? (
+                <p className="px-4 pb-2 pt-1 text-xs text-ink-faint">名单还没读出来。</p>
+              ) : (
+                participants.map((p) => {
+                  // 这一行的主词是"这是谁", 不是那一串 id —— 原来把 principalId 当成标题,
+                  // 于是整张名单读起来像一串随机字符, 谁也认不出自己。
+                  const isMe = p.participantId === me?.id
+                  return (
+                    <ListRow
+                      key={p.participantId}
+                      leading={
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-sunken text-ink-faint">
+                          <Users size={15} />
+                        </span>
+                      }
+                      title={
+                        <span className="flex items-center gap-1.5">
+                          {principalTypeZh(p.principalType) || p.principalType}
+                          {isMe && (
+                            <span className="rounded-full bg-accent-soft px-1.5 text-[10px] leading-4 text-accent">
+                              我
+                            </span>
+                          )}
+                        </span>
+                      }
+                      // id 退到副标题里, 等宽 —— 技术标识在比例字体里会随数字左右抖
+                      subtitle={
+                        <span className="font-mono text-[11px]">
+                          {p.principalId} · {roleZh(p.role)}
+                          {p.status !== 'ACTIVE' ? ` · ${participantStatusZh(p.status)}` : ''}
+                        </span>
+                      }
+                    />
+                  )
+                })
+              )}
             </SheetSection>
 
-            <SheetSection label="邀请">
+            <SheetSection label="邀请别人">
               {iAmOwner ? (
                 <div className="px-4 pb-2 pt-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-start gap-2">
                     <button
                       type="button"
                       onClick={invite}
                       disabled={busy}
-                      className="btn-primary !px-3 !py-1 text-xs"
+                      className="btn-primary shrink-0 !px-3 !py-1 text-xs"
                     >
                       <UserPlus size={13} />
                       生成分享链接
                     </button>
-                    <span className="text-[11px] text-ink-faint">
-                      链接只表达"加入这一场", 平台上只存它的哈希。
+                    <span className="flex items-center gap-1 text-[11px] leading-5 text-ink-faint">
+                      谁拿到链接谁就能进来
+                      <Hint label="这张链接是怎么算的">
+                        链接只表达"加入这一场"。平台上只存它的哈希, 所以谁也拿不回一张
+                        已经发出去的链接的明文 —— 丢了只能重铸一张。
+                      </Hint>
                     </span>
                   </div>
 
                   {minted && (
-                    <div className="mt-2 rounded-lg border border-accent/50 bg-surface p-2">
-                      <div className="text-[11px] text-ink-faint">
-                        这张票的明文<b>只出现这一次</b> —— 丢了只能重铸。
+                    <div className="mt-2 rounded-lg border border-accent/50 bg-raised p-2.5">
+                      <div className="text-[11px] leading-5 text-ink-soft">
+                        这张链接<b>只显示这一次</b>, 现在就复制走。
                       </div>
                       <div className="mt-1.5 flex items-center gap-1.5">
-                        <code className="min-w-0 flex-1 truncate rounded bg-sunken px-2 py-1 text-[11px] text-ink-soft">
+                        <code className="min-w-0 flex-1 truncate rounded bg-sunken px-2 py-1 font-mono text-[11px] text-ink-soft">
                           {window.location.origin}
                           {minted.joinUrl}
                         </code>
@@ -330,12 +393,11 @@ export default function AppSession() {
                   {invitations.map((inv) => (
                     <div
                       key={inv.invitationId}
-                      className="mt-1.5 flex items-center justify-between gap-2 rounded-lg bg-sunken px-2 py-1 text-[11px] text-ink-soft"
+                      className="mt-1.5 flex items-center justify-between gap-2 rounded-lg bg-sunken px-2.5 py-1.5 text-[11px] text-ink-soft"
                     >
                       <span className="min-w-0 truncate">
-                        {inv.role} · 用了 {inv.usedCount}
-                        {inv.maxUses ? `/${inv.maxUses}` : ''} · {inv.status}
-                        {inv.targetId ? ` · 定向 ${inv.targetId}` : ''}
+                        {roleZh(inv.role)} · {invitationStatusZh(inv.status)} · 用了 {inv.usedCount}
+                        {inv.maxUses ? `/${inv.maxUses}` : ''}
                       </span>
                       <button
                         type="button"
@@ -348,7 +410,7 @@ export default function AppSession() {
                   ))}
                 </div>
               ) : (
-                <p className="px-4 pb-2 pt-1 text-xs text-ink-faint">
+                <p className="px-4 pb-2 pt-1 text-xs leading-5 text-ink-faint">
                   只有这一场的主人能发邀请。你可以让主人把链接发给你。
                 </p>
               )}
@@ -383,24 +445,34 @@ export default function AppSession() {
               容器预览的入口。放在最后、标成"开发者", 因为它是**平台的能力**, 不是
               用户要做的事: 五条 entry 指向同一个路径的不同 `?surface=`, 想验证
               manifest 的人从这里进去。
+
+              按钮上写中文名、枚举值退到 `title` 里: 点它的人是开发者, 但"这个应用摆在
+              侧边栏里长什么样"比"PANEL 是什么"更接近他真正在问的问题。
             */}
-            <SheetSection label="容器预览 · 开发者">
+            <SheetSection
+              label="开发者: 换个框看这个应用"
+              action={
+                <Hint label="这一栏是干什么的" align="end">
+                  同一个应用可以被摆进五种容器。用户看到的永远只有"整页"那一种,
+                  另外四种是给应用作者验证清单用的 —— 同一个页面, 只是地址里那个
+                  ?surface= 不同。
+                </Hint>
+              }
+            >
               <div className="flex flex-wrap gap-1.5 px-4 pb-2 pt-1">
                 {SURFACES.filter((t) => t !== 'FULL_PAGE').map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => switchSurface(t)}
+                    title={t}
                     className="btn-ghost !px-2.5 !py-1 text-[11px]"
                   >
                     <Layers size={12} />
-                    {t}
+                    {surfaceTypeZh(t)}
                   </button>
                 ))}
               </div>
-              <p className="px-4 pb-2 font-mono text-[10px] leading-4 text-ink-faint break-all">
-                {linkFor('FULL_PAGE') || '—'}
-              </p>
             </SheetSection>
           </ActionSheet>
         )}
@@ -417,22 +489,33 @@ export default function AppSession() {
   return (
     <div className="h-full overflow-y-auto bg-surface">
       <header className="sticky top-0 z-10 border-b border-line bg-surface/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-5 py-4">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-5 py-3.5">
           <button
             type="button"
             onClick={() => switchSurface('FULL_PAGE')}
-            className="btn-ghost !px-3 !py-1.5"
+            className="btn-ghost shrink-0 !px-3 !py-1.5"
             title="回到小程序"
+            aria-label="回到小程序"
           >
             <ArrowLeft size={15} />
           </button>
-          <span className="text-lg text-ink">{detail.name || appId}</span>
-          <span className="text-xs text-ink-faint">
-            容器预览 · 会话 {sessionId.slice(0, 8)}…
+          <span className="text-lg font-medium tracking-tight text-ink">{detail.name || appId}</span>
+          {/*
+            「开发者」这三个字是这一屏的定位。原先这里是一句解释用的长句, 压在页面
+            最下面 —— 读到它的人已经看完整屏了, 正是最不需要它的时候; 而刚进来的人
+            恰恰要先知道"这不是用户看到的样子"。
+          */}
+          <span className="rounded-full bg-warn/15 px-2 py-0.5 text-[10px] font-medium text-warn">
+            开发者
           </span>
+          <span className="text-xs text-ink-faint">容器预览</span>
+          <Hint label="这一屏是什么">
+            同一份应用界面摆在五种外框里的样子。用户看到的不是它 —— 从「发现」打开应用
+            会直接进小程序, 应用铺满整屏, 平台上只剩右上角一枚胶囊。
+          </Hint>
           <Link
             to={`/applications/${encodeURIComponent(appId)}`}
-            className="ml-auto text-xs text-ink-faint hover:text-ink"
+            className="ml-auto shrink-0 text-xs text-ink-faint transition-colors hover:text-ink"
           >
             应用详情
           </Link>
@@ -441,22 +524,35 @@ export default function AppSession() {
 
       <main className="mx-auto max-w-5xl px-5 py-6">
         {error && (
-          <div className="card mb-6 border-danger/30 bg-danger/10 text-sm text-danger">{error}</div>
+          <div className="mb-6">
+            <PanelError message={error} />
+          </div>
         )}
 
+        {/* 切换条。这一条在这里不是噪音 —— 它正是被观察的对象(见文件头)。 */}
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-ink-faint">以…打开</span>
-          {SURFACES.map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => switchSurface(type)}
-              className={type === surface ? 'btn-primary !px-3 !py-1 text-xs' : 'btn-ghost !px-3 !py-1 text-xs'}
-            >
-              {type}
-            </button>
-          ))}
-          <span className="ml-auto font-mono text-[11px] text-ink-faint">{linkFor(surface) || '—'}</span>
+          <span className="text-xs text-ink-faint">摆在</span>
+          {SURFACES.map((type) => {
+            const active = type === surface
+            return (
+              <button
+                key={type}
+                type="button"
+                onClick={() => switchSurface(type)}
+                aria-pressed={active}
+                title={type}
+                className={`${active ? 'btn-primary' : 'btn-ghost'} !px-3 !py-1 text-xs`}
+              >
+                {surfaceTypeZh(type)}
+              </button>
+            )
+          })}
+          <span
+            className="ml-auto min-w-0 max-w-full select-all truncate font-mono text-[11px] text-ink-faint"
+            title={linkFor(surface) || '—'}
+          >
+            {linkFor(surface) || '—'}
+          </span>
         </div>
 
         <SurfaceHost
@@ -468,11 +564,6 @@ export default function AppSession() {
           onClose={() => switchSurface('FULL_PAGE')}
           onExpand={() => switchSurface('FULL_PAGE')}
         />
-
-        <p className="mt-6 text-xs leading-relaxed text-ink-faint">
-          这一屏是容器预览 —— 同一份应用界面摆在五种外框里的样子。用户看到的不是它:
-          从「发现」打开应用会直接进小程序。
-        </p>
       </main>
     </div>
   )
