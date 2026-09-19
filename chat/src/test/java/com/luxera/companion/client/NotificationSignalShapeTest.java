@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -75,13 +76,18 @@ class NotificationSignalShapeTest {
      *
      * <p>"少了"同样要红: 一个不含 {@code conversationId} 的信号, 客户端没法知道该点开谁,
      * 于是它只能退回去拉整个列表 —— 而那是"一条通知触发了 N 次读取"的来源。
+     *
+     * <p>1.0.2 加了 {@code unreadCount}, 于是这条用例从四个变成五个。它是**按预期红掉的**:
+     * 加字段的人(我)在改这一行之前必须先回答"它是内容吗"。答案记在那个字段的 javadoc 里 ——
+     * 不是: 它的值域是自然数, 而自由文本才是内容的载体。
      */
     @Test
-    void theSignalHasExactlyFourMetaFields() {
+    void theSignalHasExactlyFiveMetaFields() {
         List<String> names = Arrays.stream(NotificationSignal.class.getRecordComponents())
                 .map(RecordComponent::getName)
                 .collect(Collectors.toList());
-        assertEquals(List.of("signalId", "conversationId", "fromAccountId", "raisedAt"), names,
+        assertEquals(List.of("signalId", "conversationId", "fromAccountId", "raisedAt",
+                        "unreadCount"), names,
                 "通知信号的分量集合变了。加字段之前先问一次: 它是内容吗? "
                         + "内容只能从 GET /api/client/conversations/{accountId}/messages 出来。");
 
@@ -90,6 +96,37 @@ class NotificationSignalShapeTest {
         assertEquals(String.class, componentOf("conversationId").getType());
         assertEquals(String.class, componentOf("fromAccountId").getType());
         assertEquals(LocalDateTime.class, componentOf("raisedAt").getType());
+        assertEquals(Integer.class, componentOf("unreadCount").getType(),
+                "必须是包装类型 Integer, 不能改成 int —— 见下面那条缺字段的用例");
+    }
+
+    /**
+     * ★ {@code unreadCount} 缺席时是 {@code null}, <b>不是 0</b> —— 这条用例是那个设计决定的锁。
+     *
+     * <p>"未读为 0"与"对面没发这个字段"是两件完全不同的事, 而 {@code int} 会让它们变成同一个
+     * 值。后果不是理论上的: 本项目的服务是就地覆盖 fat jar 后重启的, 于是"库里的 artifact 版本"
+     * 与"实际在跑的进程"可以不一致 —— 一个还在跑 1.0.1 的服务不会发这个字段, 而所有客户端的
+     * 红点会永远停在 0, 现象是"她什么都没收到"。那不是一条报错, 是一个**看起来很正常的空**。
+     *
+     * <p>所以这里钉两件事: 缺字段 → {@code null}(消费方能发现); 有字段 → 原值(正常路径不退化)。
+     * 谁要是把类型改成 {@code int} 来"去掉这个 nullable", 第一条断言立刻红。
+     */
+    @Test
+    void aMissingUnreadCountIsNullNotZero() throws Exception {
+        NotificationSignal fromOldProducer = mapper.readValue(
+                "{\"signalId\":9,\"conversationId\":\"conv-9\",\"fromAccountId\":\"acc-9\","
+                        + "\"raisedAt\":\"2026-09-19T10:30:00\"}",
+                NotificationSignal.class);
+        assertNull(fromOldProducer.unreadCount(),
+                "缺 unreadCount 时必须是 null。为 0 的话, 一个还在跑旧契约的服务会让红点"
+                        + "永远不亮 —— 而'未读 0'是一个完全合理的值, 于是没有任何东西会报错");
+
+        NotificationSignal fromCurrentProducer = mapper.readValue(
+                "{\"signalId\":10,\"conversationId\":\"conv-9\",\"fromAccountId\":\"acc-9\","
+                        + "\"raisedAt\":\"2026-09-19T10:31:00\",\"unreadCount\":7}",
+                NotificationSignal.class);
+        assertEquals(7, fromCurrentProducer.unreadCount(),
+                "正常路径上原值必须一字不差地过来 —— 它是收件人在红点上看到的那个数");
     }
 
     /**
@@ -124,19 +161,23 @@ class NotificationSignalShapeTest {
     @Test
     void theWireFormatCarriesNothingElse() throws Exception {
         NotificationSignal signal = new NotificationSignal(
-                17L, "conv-1", "acc-9", LocalDateTime.of(2026, 9, 19, 10, 30));
+                17L, "conv-1", "acc-9", LocalDateTime.of(2026, 9, 19, 10, 30), 3);
         JsonNode json = mapper.readTree(mapper.writeValueAsString(signal));
 
         List<String> keys = new ArrayList<>();
         json.fieldNames().forEachRemaining(keys::add);
-        assertEquals(List.of("signalId", "conversationId", "fromAccountId", "raisedAt"), keys,
+        assertEquals(List.of("signalId", "conversationId", "fromAccountId", "raisedAt",
+                        "unreadCount"), keys,
                 "线上形状多出了字段: " + json);
 
-        // 逐字段确认没有一个是正文: 四个值只能是数字、两个 id、一个时刻
+        // 逐字段确认没有一个是正文: 五个值只能是数字、两个 id、一个时刻、一个计数
         assertEquals(17L, json.path("signalId").asLong());
         assertEquals("conv-1", json.path("conversationId").asText());
         assertEquals("acc-9", json.path("fromAccountId").asText());
         assertTrue(json.path("raisedAt").isTextual(), "时刻应当是文本(ISO-8601), 实际: " + json);
+        assertTrue(json.path("unreadCount").isNumber(),
+                "未读数必须是数字 —— 它是红点上的那个值, 不是任何形式的文本: " + json);
+        assertEquals(3, json.path("unreadCount").asInt());
     }
 
     /**
@@ -151,7 +192,7 @@ class NotificationSignalShapeTest {
     @Test
     void aNotificationFrameHasNowhereToPutContent() throws Exception {
         NotificationSignal signal = new NotificationSignal(
-                3L, "conv-2", "acc-1", LocalDateTime.of(2026, 9, 19, 11, 0));
+                3L, "conv-2", "acc-1", LocalDateTime.of(2026, 9, 19, 11, 0), 1);
         JsonNode json = mapper.readTree(
                 mapper.writeValueAsString(ClientStreamFrame.notification(signal)));
 

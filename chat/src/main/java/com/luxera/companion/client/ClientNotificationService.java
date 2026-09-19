@@ -87,6 +87,14 @@ public class ClientNotificationService {
      * {@code conversation_read_state.muted_until} 那一行), 不是把某个值传下来: 判定的时刻
      * 必须是"消息到达的时刻", 用户在消息到达前 1 毫秒打开了免打扰, 那一次就该不响。
      *
+     * <h2>未读数是本方法的产出之一(契约 1.0.2)</h2>
+     *
+     * <p>信号带上了 {@code unreadCount}, 而它是在这里读出来的({@code readStates.unreadOf})。
+     * 放这里的理由是取值时刻: 这个数必须在"消息已提交、读状态已自增"的那一瞬间取,
+     * 而本方法恰好跑在 {@code AFTER_COMMIT} 上。客户端自己累加是不行的 —— 免打扰的会话
+     * 一条信号都不发, 于是它的未读在客户端那边<b>只会偏小</b>, 而"偏小"与"没有新消息"
+     * 看起来是一样的。
+     *
      * @param recipientAccountId 收件人的聊天账号 id —— 与会话参与者、读状态、WS 连接
      *                           三处用的是同一个命名空间里的同一个值, 于是"判定用的是谁的
      *                           免打扰"与"信号发给谁"不可能不一致
@@ -108,8 +116,17 @@ public class ClientNotificationService {
         // 先记后发最多带来**重复**: 重连补发与广播各给了一次。而重复是可去重的 ——
         // signalId 在同一个账号内单调递增, 客户端只要丢掉 {@code <= lastAckSignalId} 的那些。
         // 用一次可去重的重复, 换掉一次不可察觉的丢失。
+        // 未读数在**这里**取, 而不是在 append 里: append 是纯内存结构, 手上没有仓储;
+        // 而本方法跑在 AFTER_COMMIT 上, 于是这一行读到的是"消息已落库、读状态已自增"之后
+        // 的那个数 —— 也就是收件人此刻真会在红点上看到的那个数。
+        //
+        // 契约 1.0.2 之前这个数根本不发出去, 而下面是它当初的替代方案(**客户端自己累加**):
+        // 那种做法在三个地方漏 —— 免打扰的会话一条信号都不发(数照涨)、
+        // 超过补发容量的信号永久丢失、平台重启后日志清空。三处都只会让客户端的红点
+        // 偏小, 而"偏小的未读"与"确实没有新消息"在界面上长得一模一样。
+        int unreadCount = readStates.unreadOf(conversationId, recipientAccountId);
         NotificationSignal signal =
-                signalLog.append(recipientAccountId, conversationId, fromAccountId);
+                signalLog.append(recipientAccountId, conversationId, fromAccountId, unreadCount);
         streams.notify(recipientAccountId, signal);
         return Optional.of(signal);
     }

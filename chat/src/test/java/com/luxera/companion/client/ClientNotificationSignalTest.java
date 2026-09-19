@@ -305,8 +305,12 @@ class ClientNotificationSignalTest {
         JsonNode shape = objectMapper.readTree(wire);
         List<String> keys = new ArrayList<>();
         shape.fieldNames().forEachRemaining(keys::add);
-        assertEquals(List.of("signalId", "conversationId", "fromAccountId", "raisedAt"), keys,
+        assertEquals(List.of("signalId", "conversationId", "fromAccountId", "raisedAt",
+                        "unreadCount"), keys,
                 "信号上多出了字段 —— 加之前先问一次: 它是内容吗? 实际: " + shape);
+        assertEquals(1, shape.path("unreadCount").asInt(),
+                "这条消息对收件人是一次未读, 而平台是在 AFTER_COMMIT 上读的自己那一行, "
+                        + "所以这个数此刻必须是 1(见 NotificationSignal#unreadCount): " + shape);
 
         // 而正文确实在库里 —— 否则上面那条断言会因为"消息压根没发出去"而假绿
         JsonNode page = json(mockMvc.perform(get(clientPath(agentAccount) + "/messages")

@@ -131,8 +131,12 @@ class ClientStreamE2eTest {
         JsonNode shape = client.mapper.readTree(client.lastRaw);
         List<String> keys = new ArrayList<>();
         shape.path("signal").fieldNames().forEachRemaining(keys::add);
-        assertEquals(List.of("signalId", "conversationId", "fromAccountId", "raisedAt"), keys,
+        assertEquals(List.of("signalId", "conversationId", "fromAccountId", "raisedAt",
+                        "unreadCount"), keys,
                 "信号上多出了一个键 —— 加之前先问一次: 它是内容吗? 实际: " + shape);
+        assertEquals(1, signal.unreadCount(),
+                "她还没读过这一条, 红点上就是 1 —— 这个数由平台给(契约 1.0.2), "
+                        + "不许由客户端自己累加, 因为它必须包含'免打扰期间照涨的那些'");
 
         ws.close();
     }

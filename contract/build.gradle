@@ -1,7 +1,7 @@
 // contract —— 对外接口定义项目。
 //
 // 铁律: 不依赖仓内任何其他 Gradle 项目（settings.gradle 里也只在 chat 侧单向引用它）。
-// 它会被 publishToMavenLocal 成 com.luxera:contract:1.0.1, 被仿真 Agent 平台仓库
+// 它会被 publishToMavenLocal 成 com.luxera:contract:1.0.2, 被仿真 Agent 平台仓库
 // （simulation-agent-platform）当作普通外部依赖引入 —— 这正是"契约先行"的物理形态。
 //
 // 版本史:
@@ -10,6 +10,16 @@
 //          (ChatProvisioningPort / CompanionProvisioningPort 及其附带记录) —— 它们是
 //          拆分前写的设计草图, 拆分后两仓谁都没实现过。换成真正被接上的那一个:
 //          AgentRegistrationPort(仓 1 → 仓 2 openAPI 的注册调用)。
+//   1.0.2  contracts/client/NotificationSignal 增加 unreadCount —— 仓 2 的
+//          ChatPlatformGateway 上那条信号必须有这个值(它的 NotificationSignal
+//          unreadCount 是手机的未读快照), 而 1.0.1 的信封里没有它, 于是唯一的
+//          替代方案是"仓 2 自己数"。自己数会在三处漏(免打扰不发信号、超出补发容量
+//          的信号丢失、平台重启清空日志), 而漏的表现是红点偏小 —— 与"没有新消息"
+//          无法区分。所以补在源头: 平台在 AFTER_COMMIT 那一刻读得出来这个数,
+//          那就不该让任何人去猜。
+//          刻意**没有**同时加 reason / soundProfile: 平台今天只有一种理由
+//          (未免打扰的会话来了消息), 加两个恒为常量的字段只会稀释
+//          NotificationSignalShapeTest 那道"分量恰好是这几个"的闸。
 //
 // 内部按业务分目录（包名不动, 保持与历史测试/文档的引用一致）:
 //   contracts/chat/          聊天业务的对外契约: api(MessageView…) / events / dhcp / simulator / provision / spi 的三个 chat 端口
@@ -36,7 +46,7 @@ publishing {
             from components.java
             groupId = 'com.luxera'
             artifactId = 'contract'
-            version = '1.0.1'
+            version = '1.0.2'
             // dependencyManagement(BOM) 声明的版本不会进 pom —— 用 resolved 版本发布,
             // 仓 2 引入时才不需要自己再拼一套 BOM
             versionMapping {

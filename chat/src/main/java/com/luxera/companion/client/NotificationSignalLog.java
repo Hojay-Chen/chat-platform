@@ -61,13 +61,20 @@ public class NotificationSignalLog {
      *
      * <p>序号从 1 开始(不是 0): 0 在协议里表示"我还没有确认过任何一条"
      * ({@code ClientStreamFrame.lastAckSignalId}), 两者共用一个数值空间就必须分得开。
+     *
+     * @param unreadCount 这个会话此刻的未读数 —— 由<b>调用方</b>读出来传进来, 而不是在这里查。
+     *                    理由不是省一次查询, 而是<b>取值时刻</b>: 这个数必须在"消息已提交、
+     *                    读状态已自增"的那一瞬间取(见 {@code ClientNotificationService#raise}),
+     *                    而本类是纯内存结构、手上没有任何仓储, 也就没有可能在错的时候去查。
+     *                    把"什么时候取值"交给有能力取对的那一层, 是这里唯一正确的分工。
      */
-    public NotificationSignal append(String accountId, String conversationId, String fromAccountId) {
+    public NotificationSignal append(String accountId, String conversationId, String fromAccountId,
+                                    int unreadCount) {
         long id = nextIdByAccount
                 .computeIfAbsent(accountId, k -> new AtomicLong(0))
                 .incrementAndGet();
         NotificationSignal signal = new NotificationSignal(
-                id, conversationId, fromAccountId, LocalDateTime.now());
+                id, conversationId, fromAccountId, LocalDateTime.now(), unreadCount);
 
         Deque<NotificationSignal> log = byAccount.computeIfAbsent(accountId, k -> new ArrayDeque<>());
         synchronized (log) {
