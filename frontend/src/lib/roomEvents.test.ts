@@ -15,9 +15,26 @@ describe('classifyRoomEvent · 该不该插进当前消息流', () => {
     expect(r.applyToRoom).toBe(false)
   })
 
-  it('没有 conversationId 的事件算当前会话的 —— 老事件流里有这种帧', () => {
-    // 一律丢掉的话, typing 这类不带会话 id 的提示就永远不出现
+  it('没有 conversationId 的**瞬时提示**算当前会话的 —— 老事件流里有这种帧', () => {
+    // 一律丢掉的话, typing 这类不带会话 id 的提示就永远不出现。
+    // 这类事件插错了的代价是"闪一下", 不是"伪造一条聊天记录", 所以可以兜底。
     expect(classifyRoomEvent('companion_typing', { typing: true }, ME).applyToRoom).toBe(true)
+    expect(classifyRoomEvent('message_read', { messageId: 'm1' }, ME).applyToRoom).toBe(true)
+  })
+
+  it('★ 没有 conversationId 的**消息**不插进任何房间 —— 缺归属不等于属于我这段', () => {
+    // 这一条与上面那条只差事件类型, 却是"聊天记录被伪造"和"提示闪一下"的区别。
+    //
+    // 真实事故: Agent 平台那处延迟回复的事件漏了 conversationId, 而复查循环当时每分钟
+    // 给同一条消息补一次回复, 一个月攒下近 7000 条。老规则把"没带会话 id"读成"算当前
+    // 会话的", 于是打开任何一段对话都会看到一墙几乎一样的、不属于它的气泡 ——
+    // 用户看到的是一段他没聊过的聊天记录。
+    for (const e of ['companion_message', 'message_created']) {
+      const r = classifyRoomEvent(e, { messageId: 'm1', content: '你好' }, ME)
+      expect(r.applyToRoom, e).toBe(false)
+      // 但要刷新列表: 这条消息确实落了库, 列表上某一行确实变了 —— 只是不属于**这一段**
+      expect(r.refreshList, e).toBe(true)
+    }
   })
 
   it('还没打开任何会话时, 带会话 id 的事件一条都不适用', () => {

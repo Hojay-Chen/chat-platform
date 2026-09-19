@@ -42,6 +42,36 @@ const DELETED_EVENT = 'conversation_deleted'
 /** 会让会话列表需要重新拉取的事件。消息类改排序与摘要, 销毁类直接少一行。 */
 const LIST_EVENTS = new Set([...MESSAGE_EVENTS, DELETED_EVENT])
 
+/**
+ * 这条事件属不属于当前打开的那段会话。
+ *
+ * <h2>为什么"缺 conversationId"对两类事件的答案不同</h2>
+ *
+ * 老规则是 `!convId || convId === open` —— 缺会话 id 一律算当前房间的, 而它的理由是
+ * 真的: `companion_typing` / `message_read` / `user_message_status` 这些**瞬时提示**
+ * 本来就不带会话 id, 一律丢掉的话"正在输入…"就永远不出现。
+ *
+ * <p>但那条例外被**消息类**事件吃掉了, 而后果不是少一条提示 —— 是**多一条消息**:
+ * 一个不带 conversationId 的 `companion_message` 会插进用户当时恰好开着的那一段对话,
+ * 无论它本来属于谁。因此它不可逆: 用户看到一条对方从未在这段对话里说过的话, 而界面上
+ * 没有任何东西告诉他这条是串进来的。
+ *
+ * <p>这条不等式是**真的发生过**的(2026-09 排障): Agent 平台那处延迟回复的
+ * `publishEvent` 漏了 `conversationId`(平台里另外三处都带着), 而复查循环当时每分钟
+ * 给同一条消息补一次回复 —— 一个月攒下近 7000 条这种事件。于是打开**任何**一段对话,
+ * 都会看到一墙几乎一样的、不属于它的气泡。修了两处: 那边补上字段(源头), 这里不再
+ * 让"没带归属"的消息类事件落地(兜底)。
+ *
+ * <p>所以判据不是"缺字段怎么办", 而是"这条事件插错了会不会不可逆":
+ * 瞬时提示插错了顶多闪一下, 消息插错了是伪造聊天记录。
+ */
+function belongsToRoom(event: string, convId: string, openConversationId: string | undefined): boolean {
+  if (!openConversationId) return false
+  if (convId) return convId === openConversationId
+  // 不带会话 id: 只有瞬时提示类可以落进当前房间, 消息类一律不落
+  return !MESSAGE_EVENTS.has(event)
+}
+
 export interface RoomEventEffect {
   /** 要不要作用在**当前打开的那段会话**的消息流上 */
   applyToRoom: boolean
@@ -77,7 +107,7 @@ export function classifyRoomEvent(
 
   return {
     // 销毁事件不往房间里插任何东西 —— 见 closeRoom 的说明。
-    applyToRoom: !deleted && (!convId || convId === openConversationId),
+    applyToRoom: !deleted && belongsToRoom(event, convId, openConversationId),
     // ★ 注意这里**没有** `&& applyToRoom`。这一句就是那个 bug 的修复本身:
     //   会话列表画的是所有会话, 所以它的刷新与"消息属于哪段会话"无关。
     refreshList: LIST_EVENTS.has(event),

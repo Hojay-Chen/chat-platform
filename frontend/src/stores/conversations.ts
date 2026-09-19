@@ -18,6 +18,20 @@ import { totalUnread } from '@/lib/conversations'
  * 所以一期**只轮询这一个列表**, 频率与今天 `Chat.tsx` 里那个 `loadUnread` 相同(30s)。
  * 轮询是一期可接受的代价; 二期换成 SSE 时, 这个 store 的对外签名一个字都不用改 ——
  * 变的只是谁来调 `setList`。
+ *
+ * <h2>为什么合并并发拉取</h2>
+ *
+ * 因为 `load()` 的调用者不止这一个 30s 的定时器: 每一条 `companion_message` /
+ * `message_created` 事件也会调它(见 `lib/roomEvents.ts` 的 `refreshList`)。而事件可以
+ * **成串**到达 —— SSE 在建立连接时会回放最近的若干条事件(服务端 `EventController` 的
+ * `REPLAY_LIMIT`)。于是"打开一段对话"这件事会变成"每条回放事件各拉一次全量列表"。
+ *
+ * <p>实测(2026-09 排障): 打开一段 92 条消息的对话, 9 秒内发出 **186 次**
+ * `GET /api/conversations`; 换一段只有 2 条消息的对话, 同一操作只有 1 次。
+ * 这不是"多几个请求"的量级 —— 它同时占满浏览器的连接池, 而聊天页的首屏渲染正排队
+ * 等在那些连接后面, 用户看到的就是"界面卡住不动"。
+ *
+ * <p>合并是无损的, 理由见 `load()` 的注释: 这个列表是"最后一次结果即真相"。
  */
 
 interface ConversationState {
@@ -31,12 +45,22 @@ interface ConversationState {
   reset: () => void
 }
 
-export const useConversationStore = create<ConversationState>((set, get) => ({
-  list: [],
-  loading: false,
-  error: null,
+/**
+ * 尾部合并的安静窗口。
+ *
+ * <p>不直接"在途结束后立刻补一次", 是因为事件是**按条**到的: 立刻补的话, 每一条事件
+ * 又会各补一次, 186 条事件只是从 186 次拉取变成十几次 —— 好了, 但没解决问题。
+ * 等一小段安静期, 才能把"这一整串突发"合成一次。
+ */
+const COALESCE_MS = 300
 
-  load: async () => {
+/** 在途的那一次拉取。非空即表示"现在只允许有一次"。 */
+let inFlight: Promise<void> | null = null
+/** 在途期间又有人要过一次 —— 落地后还欠他一次。 */
+let owed = false
+
+export const useConversationStore = create<ConversationState>((set, get) => {
+  const run = async (): Promise<void> => {
     // 只有还没有数据时才显示"加载中" —— 轮询刷新时把已有列表换成骨架屏是最刺眼的一种抖动
     if (get().list.length === 0) set({ loading: true })
     try {
@@ -47,13 +71,47 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     } finally {
       set({ loading: false })
     }
-  },
+  }
 
-  patch: (id, over) =>
-    set((s) => ({ list: s.list.map((c) => (c.id === id ? { ...c, ...over } : c)) })),
+  return {
+    list: [],
+    loading: false,
+    error: null,
 
-  reset: () => set({ list: [], loading: false, error: null }),
-}))
+    /**
+     * 拉一次会话列表。**并发调用会被合并** —— 见本文件顶部"为什么合并"那一节。
+     *
+     * <p>语义上这是无损的: 这个列表是"最后一次结果即真相", 并发的两次拉取里先落地的那次
+     * 一定会被后落地的覆盖, 所以中间那次请求除了占带宽和连接数之外不产生任何影响。
+     */
+    load: () => {
+      if (inFlight) {
+        owed = true
+        return inFlight
+      }
+      inFlight = (async () => {
+        try {
+          await run()
+          while (owed) {
+            owed = false
+            // 等安静期: 突发还没结束就再等一轮, 不结束就不发
+            await new Promise((resolve) => setTimeout(resolve, COALESCE_MS))
+            if (owed) continue
+            await run()
+          }
+        } finally {
+          inFlight = null
+        }
+      })()
+      return inFlight
+    },
+
+    patch: (id, over) =>
+      set((s) => ({ list: s.list.map((c) => (c.id === id ? { ...c, ...over } : c)) })),
+
+    reset: () => set({ list: [], loading: false, error: null }),
+  }
+})
 
 /**
  * TabBar 上「聊天」那个红点。
